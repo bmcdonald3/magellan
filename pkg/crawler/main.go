@@ -58,6 +58,26 @@ type Manager struct {
 	FirmwareVersion    string              `json:"firmware_version,omitempty"`
 	EthernetInterfaces []EthernetInterface `json:"ethernet_interfaces,omitempty"`
 }
+type ComputerSystemResetAction struct {
+	ResetTypeAllowableValues []string `json:"ResetType@Redfish.AllowableValues"`
+	ActionInfo               string   `json:"@Redfish.ActionInfo,omitempty"` // URI for more info on the action
+	Target                   string   `json:"target"`                        // Target URI for the action
+}
+
+type Actions struct {
+	ComputerSystemReset ComputerSystemResetAction `json:"#ComputerSystem.Reset"`
+}
+
+type RelatedItem struct {
+	OdataID string `json:"@odata.id"`
+}
+
+type PowerControlMember struct {
+	OdataID     string        `json:"@odata.id"`
+	MemberID    string        `json:"MemberId"`
+	Name        string        `json:"Name"`
+	RelatedItem []RelatedItem `json:"RelatedItem,omitempty"`
+}
 
 type InventoryDetail struct {
 	URI                  string              `json:"uri,omitempty"`                  // URI of the BMC
@@ -81,6 +101,10 @@ type InventoryDetail struct {
 	Chassis_AssetTag     string              `json:"chassis_asset_tag,omitempty"`    // Asset tag of the Chassis
 	Chassis_Manufacturer string              `json:"chassis_manufacturer,omitempty"` // Manufacturer of the Chassis
 	Chassis_Model        string              `json:"chassis_model,omitempty"`        // Model of the Chassis
+
+	HardcodedActions      *Actions             `json:"Actions,omitempty"`
+	HardcodedPowerURL     string               `json:"PowerURL,omitempty"`
+	HardcodedPowerControl []PowerControlMember `json:"PowerControl,omitempty"`
 }
 
 // CrawlBMCForSystems pulls all pertinent information from a BMC.  It accepts a CrawlerConfig and returns a list of InventoryDetail structs.
