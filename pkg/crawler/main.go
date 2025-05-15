@@ -1,6 +1,7 @@
 package crawler
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -361,6 +362,13 @@ func walkSystems(rf_systems []*redfish.ComputerSystem, rf_chassis *redfish.Chass
 
 		for _, rf_trustedmodule := range rf_computersystem.TrustedModules {
 			system.TrustedModules = append(system.TrustedModules, fmt.Sprintf("%s %s", rf_trustedmodule.InterfaceType, rf_trustedmodule.FirmwareVersion))
+		}
+
+		debugOutputJSON, err := json.MarshalIndent(system, "", "  ")
+		if err != nil {
+			log.Error().Err(err).Str("rf_system_id", rf_computersystem.ID).Msg("DEBUG_WALKSYSTEMS: Failed to marshal 'system' object to JSON for debugging")
+		} else {
+			log.Info().Str("rf_system_id", rf_computersystem.ID).RawJSON("populated_inventory_detail", debugOutputJSON).Msg("DEBUG_WALKSYSTEMS: Current 'system' object content")
 		}
 
 		systems = append(systems, system)
