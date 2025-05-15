@@ -269,12 +269,40 @@ func walkSystems(rf_systems []*redfish.ComputerSystem, rf_chassis *redfish.Chass
 			ProcessorType:  rf_computersystem.ProcessorSummary.Model,
 			MemoryTotal:    rf_computersystem.MemorySummary.TotalSystemMemoryGiB,
 		}
+
+		systemChassisIDForPaths := "RackMount/Baseboard"
+
 		if rf_chassis != nil {
 			system.Chassis_SKU = rf_chassis.SKU
 			system.Chassis_Serial = rf_chassis.SerialNumber
 			system.Chassis_AssetTag = rf_chassis.AssetTag
 			system.Chassis_Manufacturer = rf_chassis.Manufacturer
 			system.Chassis_Model = rf_chassis.Model
+		}
+
+		system.HardcodedActions = &Actions{
+			ComputerSystemReset: ComputerSystemResetAction{
+				ResetTypeAllowableValues: []string{
+					"PushPowerButton", "On", "GracefulShutdown", "ForceRestart",
+					"Nmi", "ForceOn", "ForceOff",
+				},
+				ActionInfo: fmt.Sprintf("/redfish/v1/Systems/%s/ResetActionInfo", rf_computersystem.ID),
+				Target:     fmt.Sprintf("/redfish/v1/Systems/%s/Actions/ComputerSystem.Reset", rf_computersystem.ID),
+			},
+		}
+
+		system.HardcodedPowerURL = fmt.Sprintf("/redfish/v1/Chassis/%s/Power", systemChassisIDForPaths)
+
+		system.HardcodedPowerControl = []PowerControlMember{
+			{
+				OdataID:  fmt.Sprintf("/redfish/v1/Chassis/%s/Power#/PowerControl/0", systemChassisIDForPaths),
+				MemberID: "0",
+				Name:     "Server Power Control",
+				RelatedItem: []RelatedItem{
+					{OdataID: fmt.Sprintf("/redfish/v1/Systems/%s", rf_computersystem.ID)},
+					{OdataID: fmt.Sprintf("/redfish/v1/Chassis/%s", systemChassisIDForPaths)},
+				},
+			},
 		}
 
 		rf_ethernetinterfaces, err := rf_computersystem.EthernetInterfaces()
