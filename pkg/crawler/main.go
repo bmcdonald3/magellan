@@ -85,7 +85,7 @@ type InventoryDetail struct {
 	UUID                 string              `json:"uuid,omitempty"`                 // UUID of Node
 	Manufacturer         string              `json:"manufacturer,omitempty"`         // Manufacturer of the Node
 	SystemType           string              `json:"system_type,omitempty"`          // System type of the Node
-	Name                 string              `json:"name,omitempty"`                 // Name of the Node
+	Name                 string              `json:"Name,omitempty"`                 // Name of the Node
 	Model                string              `json:"model,omitempty"`                // Model of the Node
 	Serial               string              `json:"serial,omitempty"`               // Serial number of the Node
 	BiosVersion          string              `json:"bios_version,omitempty"`         // Version of the BIOS
@@ -103,9 +103,9 @@ type InventoryDetail struct {
 	Chassis_Manufacturer string              `json:"chassis_manufacturer,omitempty"` // Manufacturer of the Chassis
 	Chassis_Model        string              `json:"chassis_model,omitempty"`        // Model of the Chassis
 
-	HardcodedActions      *Actions             `json:"Actions,omitempty"`
-	HardcodedPowerURL     string               `json:"PowerURL,omitempty"`
-	HardcodedPowerControl []PowerControlMember `json:"PowerControl,omitempty"`
+	Actions      *Actions             `json:"Actions,omitempty"`
+	PowerURL     string               `json:"PowerURL,omitempty"`
+	PowerControl []PowerControlMember `json:"PowerControl,omitempty"`
 }
 
 // CrawlBMCForSystems pulls all pertinent information from a BMC.  It accepts a CrawlerConfig and returns a list of InventoryDetail structs.
@@ -281,7 +281,7 @@ func walkSystems(rf_systems []*redfish.ComputerSystem, rf_chassis *redfish.Chass
 			system.Chassis_Model = rf_chassis.Model
 		}
 
-		system.HardcodedActions = &Actions{
+		system.Actions = &Actions{ // RENAMED from system.HardcodedActions
 			ComputerSystemReset: ComputerSystemResetAction{
 				ResetTypeAllowableValues: []string{
 					"PushPowerButton", "On", "GracefulShutdown", "ForceRestart",
@@ -292,9 +292,9 @@ func walkSystems(rf_systems []*redfish.ComputerSystem, rf_chassis *redfish.Chass
 			},
 		}
 
-		system.HardcodedPowerURL = fmt.Sprintf("/redfish/v1/Chassis/%s/Power", systemChassisIDForPaths)
+		system.PowerURL = fmt.Sprintf("/redfish/v1/Chassis/%s/Power", systemChassisIDForPaths) // RENAMED from system.HardcodedPowerURL
 
-		system.HardcodedPowerControl = []PowerControlMember{
+		system.PowerControl = []PowerControlMember{ // RENAMED from system.HardcodedPowerControl
 			{
 				OdataID:  fmt.Sprintf("/redfish/v1/Chassis/%s/Power#/PowerControl/0", systemChassisIDForPaths),
 				MemberID: "0",
