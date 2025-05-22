@@ -72,7 +72,7 @@ func CollectInventory(assets *[]RemoteAsset, params *CollectParams) ([]map[strin
 
 	// set the client's params from CLI
 	// NOTE: temporary solution until client.NewClient() is fixed
-	smdClient.URI = params.URI
+	smdClient.URI = strings.TrimPrefix(params.URI, "https://")
 	if params.CaCertPath != "" {
 		cacert, err := os.ReadFile(params.CaCertPath)
 		if err != nil {
