@@ -370,7 +370,7 @@ func walkSystems(rf_systems []*redfish.ComputerSystem, rf_chassis *redfish.Chass
 		} else {
 			log.Info().Str("rf_system_id", rf_computersystem.ID).RawJSON("populated_inventory_detail", debugOutputJSON).Msg("DEBUG_WALKSYSTEMS: Current 'system' object content")
 		}
-
+		system.URI = "172.24.0.3:443/redfish/v1/Systems/QSBP82909087"
 		systems = append(systems, system)
 	}
 	return systems, nil
