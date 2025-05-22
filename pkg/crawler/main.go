@@ -255,6 +255,7 @@ func CrawlBMCForManagers(config CrawlerConfig) ([]Manager, error) {
 //  8. Returns the systems slice and any error encountered during processing.
 func walkSystems(rf_systems []*redfish.ComputerSystem, rf_chassis *redfish.Chassis, baseURI string) ([]InventoryDetail, error) {
 	systems := []InventoryDetail{}
+	baseURI = strings.TrimPrefix(baseURI, "https://")
 	for _, rf_computersystem := range rf_systems {
 		system := InventoryDetail{
 			URI:            baseURI + "/redfish/v1/Systems/" + rf_computersystem.ID,
@@ -281,7 +282,7 @@ func walkSystems(rf_systems []*redfish.ComputerSystem, rf_chassis *redfish.Chass
 			system.Chassis_Model = rf_chassis.Model
 		}
 
-		system.Actions = &Actions{ // RENAMED from system.HardcodedActions
+		system.Actions = &Actions{
 			ComputerSystemReset: ComputerSystemResetAction{
 				ResetTypeAllowableValues: []string{
 					"PushPowerButton", "On", "GracefulShutdown", "ForceRestart",
@@ -292,9 +293,9 @@ func walkSystems(rf_systems []*redfish.ComputerSystem, rf_chassis *redfish.Chass
 			},
 		}
 
-		system.PowerURL = fmt.Sprintf("/redfish/v1/Chassis/%s/Power", systemChassisIDForPaths) // RENAMED from system.HardcodedPowerURL
+		system.PowerURL = fmt.Sprintf("/redfish/v1/Chassis/%s/Power", systemChassisIDForPaths)
 
-		system.PowerControl = []PowerControlMember{ // RENAMED from system.HardcodedPowerControl
+		system.PowerControl = []PowerControlMember{
 			{
 				OdataID:  fmt.Sprintf("/redfish/v1/Chassis/%s/Power#/PowerControl/0", systemChassisIDForPaths),
 				MemberID: "0",
@@ -370,7 +371,6 @@ func walkSystems(rf_systems []*redfish.ComputerSystem, rf_chassis *redfish.Chass
 		} else {
 			log.Info().Str("rf_system_id", rf_computersystem.ID).RawJSON("populated_inventory_detail", debugOutputJSON).Msg("DEBUG_WALKSYSTEMS: Current 'system' object content")
 		}
-		system.URI = "172.24.0.3:443/redfish/v1/Systems/QSBP82909087"
 		systems = append(systems, system)
 	}
 	return systems, nil
