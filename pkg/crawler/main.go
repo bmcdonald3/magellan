@@ -83,6 +83,7 @@ type PowerControlMember struct {
 type InventoryDetail struct {
 	URI                  string              `json:"uri,omitempty"`                  // URI of the BMC
 	UUID                 string              `json:"uuid,omitempty"`                 // UUID of Node
+	OdataID              string              `json:"@odata.id,omitempty"`            // OData ID of the Node
 	Manufacturer         string              `json:"manufacturer,omitempty"`         // Manufacturer of the Node
 	SystemType           string              `json:"system_type,omitempty"`          // System type of the Node
 	Name                 string              `json:"Name,omitempty"`                 // Name of the Node
@@ -260,6 +261,7 @@ func walkSystems(rf_systems []*redfish.ComputerSystem, rf_chassis *redfish.Chass
 		system := InventoryDetail{
 			URI:            baseURI + "/redfish/v1/Systems/" + rf_computersystem.ID,
 			UUID:           rf_computersystem.UUID,
+			OdataID:        fmt.Sprintf("/redfish/v1/Systems/QSBP82909087"),
 			Name:           rf_computersystem.Name,
 			Manufacturer:   rf_computersystem.Manufacturer,
 			SystemType:     string(rf_computersystem.SystemType),
