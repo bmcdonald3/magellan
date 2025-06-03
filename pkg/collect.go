@@ -44,6 +44,61 @@ type CollectParams struct {
 	SecretStore secrets.SecretStore // set BMC credentials
 }
 
+type PDUOutletActionDetails struct {
+	PowerStateAllowableValues []string `json:"PowerState@Redfish.AllowableValues"`
+	Target                    string   `json:"target"`
+}
+
+type PDUOutletActions struct {
+	OutletPowerControl PDUOutletActionDetails `json:"#Outlet.PowerControl"`
+}
+
+type PDUOutletRedfishInfo struct {
+	Name    string           `json:"Name"`
+	Actions PDUOutletActions `json:"Actions"`
+}
+
+type PDUOutletRecord struct {
+	ID                    string               `json:"ID"`
+	Type                  string               `json:"Type"`
+	RedfishType           string               `json:"RedfishType"`
+	RedfishSubtype        string               `json:"RedfishSubtype,omitempty"`
+	OdataID               string               `json:"OdataID"`
+	RedfishEndpointID     string               `json:"RedfishEndpointID"`
+	Enabled               bool                 `json:"Enabled"`
+	RedfishEndpointFQDN   string               `json:"RedfishEndpointFQDN,omitempty"`
+	RedfishURL            string               `json:"RedfishURL,omitempty"`
+	ComponentEndpointType string               `json:"ComponentEndpointType"`
+	RedfishOutletInfo     PDUOutletRedfishInfo `json:"RedfishOutletInfo"`
+}
+
+func generatePlaceholderPDUOutletRecords() ([]PDUOutletRecord, error) {
+	outlet1 := PDUOutletRecord{
+		ID:                    "smd-placeholder-outlet-001",
+		Type:                  "CabinetPDUPowerConnector",
+		RedfishType:           "Outlet",
+		RedfishSubtype:        "IEC_C13",
+		OdataID:               "/redfish/v1/PowerEquipment/RackPDUs/PlaceholderPDU1/Outlets/1",
+		RedfishEndpointID:     "placeholder-pdu-controller-1",
+		Enabled:               true,
+		RedfishEndpointFQDN:   "placeholder-pdu1.example.com",
+		RedfishURL:            "https://placeholder-pdu1.example.com/redfish/v1/PowerEquipment/RackPDUs/PlaceholderPDU1/Outlets/1",
+		ComponentEndpointType: "ComponentEndpointOutlet",
+		RedfishOutletInfo: PDUOutletRedfishInfo{
+			Name: "Outlet A01 (Test)",
+			Actions: PDUOutletActions{
+				OutletPowerControl: PDUOutletActionDetails{
+					PowerStateAllowableValues: []string{"On", "Off", "PowerCycle"},
+					Target:                    "/redfish/v1/PowerEquipment/RackPDUs/PlaceholderPDU1/Outlets/1/Actions/Outlet.PowerControl",
+				},
+			},
+		},
+	}
+
+	records := []PDUOutletRecord{outlet1}
+	return records, nil
+}
+
 // This is the main function used to collect information from the BMC nodes via Redfish.
 // The results of the collect are stored in a cache specified with the `--cache` flag.
 // The function expects a list of hosts found using the `ScanForAssets()` function.
@@ -121,6 +176,15 @@ func CollectInventory(assets *[]RemoteAsset, params *CollectParams) ([]map[strin
 					continue
 				}
 
+				var pduOutlets []PDUOutletRecord
+				pduOutlets, err = generatePlaceholderPDUOutletRecords()
+				if err != nil {
+					log.Error().Err(err).Str("uri", uri).Msg("failed to generate placeholder PDU outlet records")
+					pduOutlets = []PDUOutletRecord{}
+				}
+				pduJSONBytes, _ := json.MarshalIndent(pduOutlets, "", "  ")
+				log.Debug().RawJSON("generatedPDUOutletsJSON", pduJSONBytes).Str("uri", uri).Msg("DEBUG: Placeholder PDU Outlet JSON generated")
+
 				// get BMC username to send
 				bmcCreds := bmc.GetBMCCredentialsOrDefault(params.SecretStore, config.URI)
 				if bmcCreds == (bmc.BMCCredentials{}) {
@@ -138,6 +202,7 @@ func CollectInventory(assets *[]RemoteAsset, params *CollectParams) ([]map[strin
 					"RediscoverOnUpdate": false,
 					"Systems":            systems,
 					"Managers":           managers,
+					"PDUOutlets":         pduOutlets,
 					"SchemaVersion":      1,
 				}
 
