@@ -4,10 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"os"
-	"path"
 
-	"github.com/OpenCHAMI/magellan/internal/cache/sqlite"
 	magellan "github.com/OpenCHAMI/magellan/pkg"
 	"github.com/rs/zerolog/log"
 
@@ -141,31 +138,19 @@ var ScanCmd = &cobra.Command{
 			Insecure:       insecure,
 		})
 
-		if len(foundAssets) > 0 && debug {
-			log.Info().Any("assets", foundAssets).Msgf("found assets from scan")
+		if len(foundAssets) == 0 {
+			log.Info().Msg("Scan complete. No responsive assets were found.")
+			return
 		}
 
-		if !disableCache && cachePath != "" {
-			// make the cache directory path if needed
-			err := os.MkdirAll(path.Dir(cachePath), 0755)
-			if err != nil {
-				log.Printf("failed to make cache directory: %v", err)
-			}
+		log.Info().Msgf("Scan complete. Found %d responsive asset(s):", len(foundAssets))
 
-			// TODO: change this to use an extensible plugin system for storage solutions
-			// (i.e. something like cache.InsertScannedAssets(path, assets) which implements a Cache interface)
-			if len(foundAssets) > 0 {
-				err = sqlite.InsertScannedAssets(cachePath, foundAssets...)
-				if err != nil {
-					log.Error().Err(err).Msg("failed to write scanned assets to cache")
-				}
-				if verbose {
-					log.Info().Msgf("saved assets to cache: %s", cachePath)
-				}
-			} else {
-				log.Warn().Msg("no assets found to save")
-			}
+		output, err := json.MarshalIndent(foundAssets, "", "  ")
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to format results to JSON")
+			return
 		}
+		fmt.Println(string(output))
 
 	},
 }
