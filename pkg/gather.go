@@ -1,13 +1,17 @@
 package magellan
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
+	"strings" // Added for string manipulation
+	"time"
 
 	"github.com/OpenCHAMI/magellan/pkg/bmc"
 	"github.com/stmcginnis/gofish"
-	"github.com/stmcginnis/gofish/common" // FIX: Add this import
+	"github.com/stmcginnis/gofish/common"
 	"github.com/stmcginnis/gofish/redfish"
 )
 
@@ -55,6 +59,16 @@ type MemoryFRUInfo struct {
 func GatherFRUInventory(hosts []string, params *CollectParams) error {
 	var allHardware []HWInventoryByLocation
 
+	// Create a custom HTTP client with longer timeouts and proxy disabled.
+	tr := &http.Transport{
+		Proxy:           nil, // Do not use the system's http_proxy settings.
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	httpClient := &http.Client{
+		Transport: tr,
+		Timeout:   30 * time.Second,
+	}
+
 	for _, host := range hosts {
 		// 1. Get credentials and connect to the BMC
 		creds, err := bmc.GetBMCCredentials(params.SecretStore, host)
@@ -63,10 +77,11 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 		}
 
 		config := gofish.ClientConfig{
-			Endpoint: "https://" + host,
-			Username: creds.Username,
-			Password: creds.Password,
-			Insecure: true,
+			Endpoint:   "https://" + host,
+			Username:   creds.Username,
+			Password:   creds.Password,
+			Insecure:   true,
+			HTTPClient: httpClient, // Pass the custom client to gofish
 		}
 
 		client, err := gofish.Connect(config)
@@ -82,11 +97,9 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 
 		// 2. Gather Raw FRU Data from each system managed by the BMC
 		for _, system := range systems {
-			// Get Processors
 			processors, err := system.Processors()
 			if err == nil {
 				for _, proc := range processors {
-					// FIX: The correct constant is common.EnabledState.
 					if proc.Status.State == common.EnabledState {
 						fru := transformProcessor(proc, system.ID)
 						allHardware = append(allHardware, fru)
@@ -94,11 +107,9 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 				}
 			}
 
-			// Get Memory
 			memoryModules, err := system.Memory()
 			if err == nil {
 				for _, mem := range memoryModules {
-					// FIX: The correct constant is common.EnabledState.
 					if mem.Status.State == common.EnabledState {
 						fru := transformMemory(mem, system.ID)
 						allHardware = append(allHardware, fru)
@@ -122,15 +133,21 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 
 // transformProcessor converts a gofish Processor object to an SMD-compatible struct
 func transformProcessor(proc *redfish.Processor, nodeXname string) HWInventoryByLocation {
-	// Construct a unique FRUID from identifying information
-	fruid := fmt.Sprintf("%s-%s-%s", proc.Manufacturer, proc.Model, proc.SerialNumber)
-	if proc.SerialNumber == "" {
-		// Fallback if serial is missing, as noted in the swagger spec
-		fruid = fmt.Sprintf("%s-%s-%s", proc.Manufacturer, proc.Model, proc.Socket)
+	// Refinement: Trim whitespace from all incoming strings
+	manufacturer := strings.TrimSpace(proc.Manufacturer)
+	model := strings.TrimSpace(proc.Model)
+	serial := strings.TrimSpace(proc.SerialNumber)
+	socket := strings.TrimSpace(proc.Socket)
+	// Refinement: Remove spaces from socket identifier for cleaner xnames
+	socketID := strings.ReplaceAll(socket, " ", "")
+
+	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
+	if serial == "" {
+		fruid = fmt.Sprintf("%s-%s-%s", manufacturer, model, socketID)
 	}
 
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("%sp%s", nodeXname, proc.Socket),
+		ID:                        fmt.Sprintf("%sp%s", nodeXname, socketID),
 		Type:                      "Processor",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocProcessor",
@@ -139,8 +156,8 @@ func transformProcessor(proc *redfish.Processor, nodeXname string) HWInventoryBy
 			Type:                 "Processor",
 			HWInventoryByFRUType: "HWInvByFRUProcessor",
 			ProcessorFRUInfo: &ProcessorFRUInfo{
-				Manufacturer: proc.Manufacturer,
-				Model:        proc.Model,
+				Manufacturer: manufacturer,
+				Model:        model,
 				TotalCores:   proc.TotalCores,
 			},
 		},
@@ -149,11 +166,18 @@ func transformProcessor(proc *redfish.Processor, nodeXname string) HWInventoryBy
 
 // transformMemory converts a gofish Memory object to an SMD-compatible struct
 func transformMemory(mem *redfish.Memory, nodeXname string) HWInventoryByLocation {
-	// Construct a unique FRUID from identifying information
-	fruid := fmt.Sprintf("%s-%s-%s", mem.Manufacturer, mem.PartNumber, mem.SerialNumber)
+	// Refinement: Trim whitespace from all incoming strings
+	manufacturer := strings.TrimSpace(mem.Manufacturer)
+	partNumber := strings.TrimSpace(mem.PartNumber)
+	serial := strings.TrimSpace(mem.SerialNumber)
+	deviceLocator := strings.TrimSpace(mem.DeviceLocator)
+	// Refinement: Remove spaces from locator for cleaner xnames
+	locatorID := strings.ReplaceAll(deviceLocator, " ", "")
+
+	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, partNumber, serial)
 
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("%sd%s", nodeXname, mem.DeviceLocator),
+		ID:                        fmt.Sprintf("%sd%s", nodeXname, locatorID),
 		Type:                      "Memory",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocMemory",
@@ -162,9 +186,9 @@ func transformMemory(mem *redfish.Memory, nodeXname string) HWInventoryByLocatio
 			Type:                 "Memory",
 			HWInventoryByFRUType: "HWInvByFRUMemory",
 			MemoryFRUInfo: &MemoryFRUInfo{
-				Manufacturer:     mem.Manufacturer,
-				PartNumber:       mem.PartNumber,
-				SerialNumber:     mem.SerialNumber,
+				Manufacturer:     manufacturer,
+				PartNumber:       partNumber,
+				SerialNumber:     serial,
 				CapacityMiB:      mem.CapacityMiB,
 				MemoryDeviceType: string(mem.MemoryDeviceType),
 			},
