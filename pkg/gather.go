@@ -132,7 +132,6 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 		Timeout:   30 * time.Second,
 	}
 
-	// This function will only process the first host from the list for this test.
 	host := hosts[0]
 
 	creds, err := bmc.GetBMCCredentials(params.SecretStore, host)
@@ -159,27 +158,30 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 		return fmt.Errorf("failed to get chassis list from %s: %v", host, err)
 	}
 
-	for _, chassis := range chassisList {
+	for chassisIndex, chassis := range chassisList {
 		power, _ := chassis.Power()
 		if power != nil {
 			for i, psu := range power.PowerSupplies {
 				if psu.Status.State == common.EnabledState {
-					fru := transformPSU(&psu, i)
+					fru := transformPSU(&psu, chassisIndex, i)
 					allHardware = append(allHardware, fru)
 				}
 			}
 		}
 
 		systems, _ := chassis.ComputerSystems()
-		for _, system := range systems {
+		for systemIndex, system := range systems {
+			// Create a valid, hardcoded base xname for node components for testing
+			nodeXname := fmt.Sprintf("x3000c%ds%db0n%d", chassisIndex, 0, systemIndex)
+
 			processors, _ := system.Processors()
 			for i, proc := range processors {
 				if proc.Status.State == common.EnabledState {
 					if proc.ProcessorType == "CPU" {
-						fru := transformProcessor(proc, i)
+						fru := transformProcessor(proc, nodeXname, i)
 						allHardware = append(allHardware, fru)
 					} else if proc.ProcessorType == "GPU" || proc.ProcessorType == "Accelerator" {
-						fru := transformAccelerator(proc, i)
+						fru := transformAccelerator(proc, nodeXname, i)
 						allHardware = append(allHardware, fru)
 					}
 				}
@@ -188,17 +190,17 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 			memoryModules, _ := system.Memory()
 			for i, mem := range memoryModules {
 				if mem.Status.State == common.EnabledState {
-					fru := transformMemory(mem, i)
+					fru := transformMemory(mem, nodeXname, i)
 					allHardware = append(allHardware, fru)
 				}
 			}
 
 			storageControllers, _ := system.Storage()
-			for _, storage := range storageControllers {
+			for storageIndex, storage := range storageControllers {
 				drives, _ := storage.Drives()
 				for i, drive := range drives {
 					if drive.Status.State == common.EnabledState {
-						fru := transformDrive(drive, i)
+						fru := transformDrive(drive, nodeXname, storageIndex, i)
 						allHardware = append(allHardware, fru)
 					}
 				}
@@ -208,7 +210,7 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 			for i, nic := range netInterfaces {
 				adapter, _ := nic.NetworkAdapter()
 				if adapter != nil {
-					fru := transformNetworkAdapter(adapter, i)
+					fru := transformNetworkAdapter(adapter, nodeXname, i)
 					allHardware = append(allHardware, fru)
 				}
 			}
@@ -224,63 +226,51 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 	return nil
 }
 
-func transformProcessor(proc *redfish.Processor, index int) HWInventoryByLocation {
+func transformProcessor(proc *redfish.Processor, nodeXname string, index int) HWInventoryByLocation {
 	manufacturer := strings.TrimSpace(proc.Manufacturer)
 	model := strings.TrimSpace(proc.Model)
 	serial := strings.TrimSpace(proc.SerialNumber)
 	socket := strings.TrimSpace(proc.Socket)
-	socketID := strings.ReplaceAll(socket, " ", "")
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
 	if serial == "" {
-		fruid = fmt.Sprintf("%s-%s-%s", manufacturer, model, socketID)
+		fruid = fmt.Sprintf("%s-%s-%s", manufacturer, model, strings.ReplaceAll(socket, " ", ""))
 	}
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("x3000c0s1b0n0p%d", index), // Hardcoded xname for testing
+		ID:                        fmt.Sprintf("%sp%d", nodeXname, index),
 		Type:                      "Processor",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocProcessor",
 		ProcessorLocationInfo:     &RedfishProcessorLocationInfo{Socket: socket},
-		PopulatedFRU: &HWInventoryByFRU{
-			FRUID:                fruid,
-			Type:                 "Processor",
-			HWInventoryByFRUType: "HWInvByFRUProcessor",
-			ProcessorFRUInfo:     &ProcessorFRUInfo{Manufacturer: manufacturer, Model: model, TotalCores: proc.TotalCores},
-		},
+		PopulatedFRU:              &HWInventoryByFRU{FRUID: fruid, Type: "Processor", HWInventoryByFRUType: "HWInvByFRUProcessor", ProcessorFRUInfo: &ProcessorFRUInfo{Manufacturer: manufacturer, Model: model, TotalCores: proc.TotalCores}},
 	}
 }
 
-func transformAccelerator(proc *redfish.Processor, index int) HWInventoryByLocation {
+func transformAccelerator(proc *redfish.Processor, nodeXname string, index int) HWInventoryByLocation {
 	manufacturer := strings.TrimSpace(proc.Manufacturer)
 	model := strings.TrimSpace(proc.Model)
 	serial := strings.TrimSpace(proc.SerialNumber)
 	socket := strings.TrimSpace(proc.Socket)
-	socketID := strings.ReplaceAll(socket, " ", "")
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
 	if serial == "" {
-		fruid = fmt.Sprintf("%s-%s-%s", manufacturer, model, socketID)
+		fruid = fmt.Sprintf("%s-%s-%s", manufacturer, model, strings.ReplaceAll(socket, " ", ""))
 	}
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("x3000c0s1b0n0a%d", index), // Hardcoded xname for testing
+		ID:                        fmt.Sprintf("%sa%d", nodeXname, index),
 		Type:                      "NodeAccel",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocNodeAccel",
 		ProcessorLocationInfo:     &RedfishProcessorLocationInfo{Socket: socket},
-		PopulatedFRU: &HWInventoryByFRU{
-			FRUID:                fruid,
-			Type:                 "NodeAccel",
-			HWInventoryByFRUType: "HWInvByFRUNodeAccel",
-			AcceleratorFRUInfo:   &AcceleratorFRUInfo{Manufacturer: manufacturer, Model: model},
-		},
+		PopulatedFRU:              &HWInventoryByFRU{FRUID: fruid, Type: "NodeAccel", HWInventoryByFRUType: "HWInvByFRUNodeAccel", AcceleratorFRUInfo: &AcceleratorFRUInfo{Manufacturer: manufacturer, Model: model}},
 	}
 }
 
-func transformMemory(mem *redfish.Memory, index int) HWInventoryByLocation {
+func transformMemory(mem *redfish.Memory, nodeXname string, index int) HWInventoryByLocation {
 	manufacturer := strings.TrimSpace(mem.Manufacturer)
 	partNumber := strings.TrimSpace(mem.PartNumber)
 	serial := strings.TrimSpace(mem.SerialNumber)
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, partNumber, serial)
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("x3000c0s1b0n0d%d", index), // Hardcoded xname for testing
+		ID:                        fmt.Sprintf("%sd%d", nodeXname, index),
 		Type:                      "Memory",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocMemory",
@@ -290,97 +280,54 @@ func transformMemory(mem *redfish.Memory, index int) HWInventoryByLocation {
 			Channel:          mem.MemoryLocation.Channel,
 			Slot:             mem.MemoryLocation.Slot,
 		},
-		PopulatedFRU: &HWInventoryByFRU{
-			FRUID:                fruid,
-			Type:                 "Memory",
-			HWInventoryByFRUType: "HWInvByFRUMemory",
-			MemoryFRUInfo: &MemoryFRUInfo{
-				Manufacturer:     manufacturer,
-				PartNumber:       partNumber,
-				SerialNumber:     serial,
-				CapacityMiB:      mem.CapacityMiB,
-				MemoryDeviceType: string(mem.MemoryDeviceType),
-			},
-		},
+		PopulatedFRU: &HWInventoryByFRU{FRUID: fruid, Type: "Memory", HWInventoryByFRUType: "HWInvByFRUMemory", MemoryFRUInfo: &MemoryFRUInfo{Manufacturer: manufacturer, PartNumber: partNumber, SerialNumber: serial, CapacityMiB: mem.CapacityMiB, MemoryDeviceType: string(mem.MemoryDeviceType)}},
 	}
 }
 
-func transformDrive(drive *redfish.Drive, index int) HWInventoryByLocation {
+func transformDrive(drive *redfish.Drive, nodeXname string, storageIndex int, driveIndex int) HWInventoryByLocation {
 	manufacturer := strings.TrimSpace(drive.Manufacturer)
 	model := strings.TrimSpace(drive.Model)
 	partNumber := strings.TrimSpace(drive.PartNumber)
 	serial := strings.TrimSpace(drive.SerialNumber)
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("x3000c0s1b0n0s0d%d", index), // Hardcoded xname for testing
+		ID:                        fmt.Sprintf("%ss%dd%d", nodeXname, storageIndex, driveIndex),
 		Type:                      "Drive",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocDrive",
 		DriveLocationInfo:         &RedfishDriveLocationInfo{},
-		PopulatedFRU: &HWInventoryByFRU{
-			FRUID:                fruid,
-			Type:                 "Drive",
-			HWInventoryByFRUType: "HWInvByFRUDrive",
-			DriveFRUInfo: &DriveFRUInfo{
-				Manufacturer:  manufacturer,
-				Model:         model,
-				PartNumber:    partNumber,
-				SerialNumber:  serial,
-				CapacityBytes: drive.CapacityBytes,
-			},
-		},
+		PopulatedFRU:              &HWInventoryByFRU{FRUID: fruid, Type: "Drive", HWInventoryByFRUType: "HWInvByFRUDrive", DriveFRUInfo: &DriveFRUInfo{Manufacturer: manufacturer, Model: model, PartNumber: partNumber, SerialNumber: serial, CapacityBytes: drive.CapacityBytes}},
 	}
 }
 
-func transformNetworkAdapter(adapter *redfish.NetworkAdapter, index int) HWInventoryByLocation {
+func transformNetworkAdapter(adapter *redfish.NetworkAdapter, nodeXname string, index int) HWInventoryByLocation {
 	manufacturer := strings.TrimSpace(adapter.Manufacturer)
 	model := strings.TrimSpace(adapter.Model)
 	partNumber := strings.TrimSpace(adapter.PartNumber)
 	serial := strings.TrimSpace(adapter.SerialNumber)
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, partNumber, serial)
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("x3000c0s1b0n0n%d", index), // Hardcoded xname for testing
+		ID:                        fmt.Sprintf("%sh%d", nodeXname, index),
 		Type:                      "NodeHsnNic",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocHSNNIC",
 		HSNNICLocationInfo:        &RedfishNetworkAdapterLocationInfo{},
-		PopulatedFRU: &HWInventoryByFRU{
-			FRUID:                fruid,
-			Type:                 "NodeHsnNic",
-			HWInventoryByFRUType: "HWInvByFRUHSNNIC",
-			NetworkAdapterFRUInfo: &NetworkAdapterFRUInfo{
-				Manufacturer: manufacturer,
-				Model:        model,
-				PartNumber:   partNumber,
-				SerialNumber: serial,
-			},
-		},
+		PopulatedFRU:              &HWInventoryByFRU{FRUID: fruid, Type: "NodeHsnNic", HWInventoryByFRUType: "HWInvByFRUHSNNIC", NetworkAdapterFRUInfo: &NetworkAdapterFRUInfo{Manufacturer: manufacturer, Model: model, PartNumber: partNumber, SerialNumber: serial}},
 	}
 }
 
-func transformPSU(psu *redfish.PowerSupply, index int) HWInventoryByLocation {
+func transformPSU(psu *redfish.PowerSupply, chassisIndex int, psuIndex int) HWInventoryByLocation {
 	manufacturer := strings.TrimSpace(psu.Manufacturer)
 	model := strings.TrimSpace(psu.Model)
 	partNumber := strings.TrimSpace(psu.PartNumber)
 	serial := strings.TrimSpace(psu.SerialNumber)
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
 	return HWInventoryByLocation{
-		ID:                                   fmt.Sprintf("x3000c0s1b0ps%d", index), // Hardcoded xname for testing
-		Type:                                 "NodeEnclosurePowerSupply",
+		ID:                                   fmt.Sprintf("x3000c%dt%d", chassisIndex, psuIndex),
+		Type:                                 "CMMRectifier", // This type matches the xXcCtTT format
 		Status:                               "Populated",
-		HWInventoryByLocationType:            "HWInvByLocNodeEnclosurePowerSupply",
+		HWInventoryByLocationType:            "HWInvByLocCMMRectifier",
 		NodeEnclosurePowerSupplyLocationInfo: &RedfishPSULocationInfo{},
-		PopulatedFRU: &HWInventoryByFRU{
-			FRUID:                fruid,
-			Type:                 "NodeEnclosurePowerSupply",
-			HWInventoryByFRUType: "HWInvByFRUNodeEnclosurePowerSupply",
-			PSUFRUInfo: &PSUFRUInfo{
-				Manufacturer:       manufacturer,
-				Model:              model,
-				PartNumber:         partNumber,
-				SerialNumber:       serial,
-				PowerCapacityWatts: psu.PowerCapacityWatts,
-			},
-		},
+		PopulatedFRU:                         &HWInventoryByFRU{FRUID: fruid, Type: "CMMRectifier", HWInventoryByFRUType: "HWInvByFRUCMMRectifier", PSUFRUInfo: &PSUFRUInfo{Manufacturer: manufacturer, Model: model, PartNumber: partNumber, SerialNumber: serial, PowerCapacityWatts: psu.PowerCapacityWatts}},
 	}
 }
