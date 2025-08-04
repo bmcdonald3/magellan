@@ -135,7 +135,7 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 			if power != nil {
 				for _, psu := range power.PowerSupplies {
 					if psu.Status.State == common.EnabledState {
-						fru := transformPSU(&psu, chassis.ID)
+						fru := transformPSU(&psu)
 						allHardware = append(allHardware, fru)
 					}
 				}
@@ -147,10 +147,10 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 				for _, proc := range processors {
 					if proc.Status.State == common.EnabledState {
 						if proc.ProcessorType == "CPU" {
-							fru := transformProcessor(proc, system.ID)
+							fru := transformProcessor(proc)
 							allHardware = append(allHardware, fru)
 						} else if proc.ProcessorType == "GPU" || proc.ProcessorType == "Accelerator" {
-							fru := transformAccelerator(proc, system.ID)
+							fru := transformAccelerator(proc)
 							allHardware = append(allHardware, fru)
 						}
 					}
@@ -159,7 +159,7 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 				memoryModules, _ := system.Memory()
 				for _, mem := range memoryModules {
 					if mem.Status.State == common.EnabledState {
-						fru := transformMemory(mem, system.ID)
+						fru := transformMemory(mem)
 						allHardware = append(allHardware, fru)
 					}
 				}
@@ -169,7 +169,7 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 					drives, _ := storage.Drives()
 					for _, drive := range drives {
 						if drive.Status.State == common.EnabledState {
-							fru := transformDrive(drive, system.ID, storage.ID)
+							fru := transformDrive(drive)
 							allHardware = append(allHardware, fru)
 						}
 					}
@@ -179,7 +179,7 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 				for _, nic := range netInterfaces {
 					adapter, _ := nic.NetworkAdapter()
 					if adapter != nil {
-						fru := transformNetworkAdapter(adapter, nic.ID, system.ID)
+						fru := transformNetworkAdapter(adapter)
 						allHardware = append(allHardware, fru)
 					}
 				}
@@ -196,7 +196,7 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 	return nil
 }
 
-func transformProcessor(proc *redfish.Processor, nodeXname string) HWInventoryByLocation {
+func transformProcessor(proc *redfish.Processor) HWInventoryByLocation {
 	manufacturer := strings.TrimSpace(proc.Manufacturer)
 	model := strings.TrimSpace(proc.Model)
 	serial := strings.TrimSpace(proc.SerialNumber)
@@ -208,9 +208,9 @@ func transformProcessor(proc *redfish.Processor, nodeXname string) HWInventoryBy
 		fruid = fmt.Sprintf("%s-%s-%s", manufacturer, model, socketID)
 	}
 
-	// FIX: Use the component's .ID for the ordinal and convert parent to lowercase.
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("%sp%s", strings.ToLower(nodeXname), proc.ID),
+		// FIX: Use the component's .Name field, which should contain the valid xname.
+		ID:                        strings.ToLower(proc.Name),
 		Type:                      "Processor",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocProcessor",
@@ -227,7 +227,7 @@ func transformProcessor(proc *redfish.Processor, nodeXname string) HWInventoryBy
 	}
 }
 
-func transformAccelerator(proc *redfish.Processor, nodeXname string) HWInventoryByLocation {
+func transformAccelerator(proc *redfish.Processor) HWInventoryByLocation {
 	manufacturer := strings.TrimSpace(proc.Manufacturer)
 	model := strings.TrimSpace(proc.Model)
 	serial := strings.TrimSpace(proc.SerialNumber)
@@ -239,9 +239,9 @@ func transformAccelerator(proc *redfish.Processor, nodeXname string) HWInventory
 		fruid = fmt.Sprintf("%s-%s-%s", manufacturer, model, socketID)
 	}
 
-	// FIX: Use the component's .ID for the ordinal and convert parent to lowercase.
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("%sa%s", strings.ToLower(nodeXname), proc.ID),
+		// FIX: Use the component's .Name field, which should contain the valid xname.
+		ID:                        strings.ToLower(proc.Name),
 		Type:                      "NodeAccel",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocNodeAccel",
@@ -257,16 +257,16 @@ func transformAccelerator(proc *redfish.Processor, nodeXname string) HWInventory
 	}
 }
 
-func transformMemory(mem *redfish.Memory, nodeXname string) HWInventoryByLocation {
+func transformMemory(mem *redfish.Memory) HWInventoryByLocation {
 	manufacturer := strings.TrimSpace(mem.Manufacturer)
 	partNumber := strings.TrimSpace(mem.PartNumber)
 	serial := strings.TrimSpace(mem.SerialNumber)
 
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, partNumber, serial)
 
-	// FIX: Use the component's .ID for the ordinal and convert parent to lowercase.
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("%sd%s", strings.ToLower(nodeXname), mem.ID),
+		// FIX: Use the component's .Name field, which should contain the valid xname.
+		ID:                        strings.ToLower(mem.Name),
 		Type:                      "Memory",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocMemory",
@@ -285,7 +285,7 @@ func transformMemory(mem *redfish.Memory, nodeXname string) HWInventoryByLocatio
 	}
 }
 
-func transformDrive(drive *redfish.Drive, nodeXname, storageID string) HWInventoryByLocation {
+func transformDrive(drive *redfish.Drive) HWInventoryByLocation {
 	manufacturer := strings.TrimSpace(drive.Manufacturer)
 	model := strings.TrimSpace(drive.Model)
 	partNumber := strings.TrimSpace(drive.PartNumber)
@@ -293,9 +293,9 @@ func transformDrive(drive *redfish.Drive, nodeXname, storageID string) HWInvento
 
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
 
-	// FIX: Use the component's .ID for the ordinal and convert parents to lowercase.
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("%s%sd%s", strings.ToLower(nodeXname), strings.ToLower(storageID), drive.ID),
+		// FIX: Use the component's .Name field, which should contain the valid xname.
+		ID:                        strings.ToLower(drive.Name),
 		Type:                      "Drive",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocDrive",
@@ -314,7 +314,7 @@ func transformDrive(drive *redfish.Drive, nodeXname, storageID string) HWInvento
 	}
 }
 
-func transformNetworkAdapter(adapter *redfish.NetworkAdapter, nicID, nodeXname string) HWInventoryByLocation {
+func transformNetworkAdapter(adapter *redfish.NetworkAdapter) HWInventoryByLocation {
 	manufacturer := strings.TrimSpace(adapter.Manufacturer)
 	model := strings.TrimSpace(adapter.Model)
 	partNumber := strings.TrimSpace(adapter.PartNumber)
@@ -322,9 +322,9 @@ func transformNetworkAdapter(adapter *redfish.NetworkAdapter, nicID, nodeXname s
 
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, partNumber, serial)
 
-	// FIX: Use the component's .ID for the ordinal and convert parent to lowercase.
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("%sn%s", strings.ToLower(nodeXname), nicID),
+		// FIX: Use the component's .Name field, which should contain the valid xname.
+		ID:                        strings.ToLower(adapter.Name),
 		Type:                      "NodeHsnNic",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocHSNNIC",
@@ -342,7 +342,7 @@ func transformNetworkAdapter(adapter *redfish.NetworkAdapter, nicID, nodeXname s
 	}
 }
 
-func transformPSU(psu *redfish.PowerSupply, chassisXname string) HWInventoryByLocation {
+func transformPSU(psu *redfish.PowerSupply) HWInventoryByLocation {
 	manufacturer := strings.TrimSpace(psu.Manufacturer)
 	model := strings.TrimSpace(psu.Model)
 	partNumber := strings.TrimSpace(psu.PartNumber)
@@ -350,9 +350,9 @@ func transformPSU(psu *redfish.PowerSupply, chassisXname string) HWInventoryByLo
 
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
 
-	// FIX: Use the component's .ID for the ordinal and convert parent to lowercase.
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("%sps%s", strings.ToLower(chassisXname), psu.ID),
+		// FIX: Use the component's .Name field, which should contain the valid xname.
+		ID:                        strings.ToLower(psu.Name),
 		Type:                      "NodeEnclosurePowerSupply",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocNodeEnclosurePowerSupply",
