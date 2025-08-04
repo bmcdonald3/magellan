@@ -133,9 +133,11 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 		for _, chassis := range chassisList {
 			power, _ := chassis.Power()
 			if power != nil {
-				for _, psu := range power.PowerSupplies {
+				// FIX: Capture the index 'i' to create the ordinal xname ID.
+				for i, psu := range power.PowerSupplies {
 					if psu.Status.State == common.EnabledState {
-						fru := transformPSU(&psu)
+						// FIX: Pass the index 'i' to the transform function.
+						fru := transformPSU(&psu, chassis.ID, i)
 						allHardware = append(allHardware, fru)
 					}
 				}
@@ -144,22 +146,27 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 			systems, _ := chassis.ComputerSystems()
 			for _, system := range systems {
 				processors, _ := system.Processors()
-				for _, proc := range processors {
+				// FIX: Capture the index 'i' to create the ordinal xname ID.
+				for i, proc := range processors {
 					if proc.Status.State == common.EnabledState {
 						if proc.ProcessorType == "CPU" {
-							fru := transformProcessor(proc)
+							// FIX: Pass the index 'i' to the transform function.
+							fru := transformProcessor(proc, system.ID, i)
 							allHardware = append(allHardware, fru)
 						} else if proc.ProcessorType == "GPU" || proc.ProcessorType == "Accelerator" {
-							fru := transformAccelerator(proc)
+							// FIX: Pass the index 'i' to the transform function.
+							fru := transformAccelerator(proc, system.ID, i)
 							allHardware = append(allHardware, fru)
 						}
 					}
 				}
 
 				memoryModules, _ := system.Memory()
-				for _, mem := range memoryModules {
+				// FIX: Capture the index 'i' to create the ordinal xname ID.
+				for i, mem := range memoryModules {
 					if mem.Status.State == common.EnabledState {
-						fru := transformMemory(mem)
+						// FIX: Pass the index 'i' to the transform function.
+						fru := transformMemory(mem, system.ID, i)
 						allHardware = append(allHardware, fru)
 					}
 				}
@@ -167,19 +174,23 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 				storageControllers, _ := system.Storage()
 				for _, storage := range storageControllers {
 					drives, _ := storage.Drives()
-					for _, drive := range drives {
+					// FIX: Capture the index 'i' to create the ordinal xname ID.
+					for i, drive := range drives {
 						if drive.Status.State == common.EnabledState {
-							fru := transformDrive(drive)
+							// FIX: Pass the index 'i' to the transform function.
+							fru := transformDrive(drive, system.ID, storage.ID, i)
 							allHardware = append(allHardware, fru)
 						}
 					}
 				}
 
 				netInterfaces, _ := system.NetworkInterfaces()
-				for _, nic := range netInterfaces {
+				// FIX: Capture the index 'i' to create the ordinal xname ID.
+				for i, nic := range netInterfaces {
 					adapter, _ := nic.NetworkAdapter()
 					if adapter != nil {
-						fru := transformNetworkAdapter(adapter)
+						// FIX: Pass the index 'i' to the transform function.
+						fru := transformNetworkAdapter(adapter, system.ID, i)
 						allHardware = append(allHardware, fru)
 					}
 				}
@@ -196,7 +207,8 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 	return nil
 }
 
-func transformProcessor(proc *redfish.Processor) HWInventoryByLocation {
+// FIX: Add index parameter to construct the xname ID correctly.
+func transformProcessor(proc *redfish.Processor, nodeXname string, index int) HWInventoryByLocation {
 	manufacturer := strings.TrimSpace(proc.Manufacturer)
 	model := strings.TrimSpace(proc.Model)
 	serial := strings.TrimSpace(proc.SerialNumber)
@@ -209,8 +221,7 @@ func transformProcessor(proc *redfish.Processor) HWInventoryByLocation {
 	}
 
 	return HWInventoryByLocation{
-		// FIX: Use the component's .Name field, which should contain the valid xname.
-		ID:                        strings.ToLower(proc.Name),
+		ID:                        fmt.Sprintf("%sp%d", strings.ToLower(nodeXname), index),
 		Type:                      "Processor",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocProcessor",
@@ -227,7 +238,8 @@ func transformProcessor(proc *redfish.Processor) HWInventoryByLocation {
 	}
 }
 
-func transformAccelerator(proc *redfish.Processor) HWInventoryByLocation {
+// FIX: Add index parameter to construct the xname ID correctly.
+func transformAccelerator(proc *redfish.Processor, nodeXname string, index int) HWInventoryByLocation {
 	manufacturer := strings.TrimSpace(proc.Manufacturer)
 	model := strings.TrimSpace(proc.Model)
 	serial := strings.TrimSpace(proc.SerialNumber)
@@ -240,8 +252,7 @@ func transformAccelerator(proc *redfish.Processor) HWInventoryByLocation {
 	}
 
 	return HWInventoryByLocation{
-		// FIX: Use the component's .Name field, which should contain the valid xname.
-		ID:                        strings.ToLower(proc.Name),
+		ID:                        fmt.Sprintf("%sa%d", strings.ToLower(nodeXname), index),
 		Type:                      "NodeAccel",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocNodeAccel",
@@ -257,7 +268,8 @@ func transformAccelerator(proc *redfish.Processor) HWInventoryByLocation {
 	}
 }
 
-func transformMemory(mem *redfish.Memory) HWInventoryByLocation {
+// FIX: Add index parameter to construct the xname ID correctly.
+func transformMemory(mem *redfish.Memory, nodeXname string, index int) HWInventoryByLocation {
 	manufacturer := strings.TrimSpace(mem.Manufacturer)
 	partNumber := strings.TrimSpace(mem.PartNumber)
 	serial := strings.TrimSpace(mem.SerialNumber)
@@ -265,8 +277,7 @@ func transformMemory(mem *redfish.Memory) HWInventoryByLocation {
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, partNumber, serial)
 
 	return HWInventoryByLocation{
-		// FIX: Use the component's .Name field, which should contain the valid xname.
-		ID:                        strings.ToLower(mem.Name),
+		ID:                        fmt.Sprintf("%sd%d", strings.ToLower(nodeXname), index),
 		Type:                      "Memory",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocMemory",
@@ -285,7 +296,8 @@ func transformMemory(mem *redfish.Memory) HWInventoryByLocation {
 	}
 }
 
-func transformDrive(drive *redfish.Drive) HWInventoryByLocation {
+// FIX: Add index parameter to construct the xname ID correctly.
+func transformDrive(drive *redfish.Drive, nodeXname, storageID string, index int) HWInventoryByLocation {
 	manufacturer := strings.TrimSpace(drive.Manufacturer)
 	model := strings.TrimSpace(drive.Model)
 	partNumber := strings.TrimSpace(drive.PartNumber)
@@ -294,8 +306,7 @@ func transformDrive(drive *redfish.Drive) HWInventoryByLocation {
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
 
 	return HWInventoryByLocation{
-		// FIX: Use the component's .Name field, which should contain the valid xname.
-		ID:                        strings.ToLower(drive.Name),
+		ID:                        fmt.Sprintf("%ss%dd%d", strings.ToLower(nodeXname), 0, index), // Assuming storage controller 0, drive index
 		Type:                      "Drive",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocDrive",
@@ -314,7 +325,8 @@ func transformDrive(drive *redfish.Drive) HWInventoryByLocation {
 	}
 }
 
-func transformNetworkAdapter(adapter *redfish.NetworkAdapter) HWInventoryByLocation {
+// FIX: Add index parameter to construct the xname ID correctly.
+func transformNetworkAdapter(adapter *redfish.NetworkAdapter, nodeXname string, index int) HWInventoryByLocation {
 	manufacturer := strings.TrimSpace(adapter.Manufacturer)
 	model := strings.TrimSpace(adapter.Model)
 	partNumber := strings.TrimSpace(adapter.PartNumber)
@@ -323,8 +335,7 @@ func transformNetworkAdapter(adapter *redfish.NetworkAdapter) HWInventoryByLocat
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, partNumber, serial)
 
 	return HWInventoryByLocation{
-		// FIX: Use the component's .Name field, which should contain the valid xname.
-		ID:                        strings.ToLower(adapter.Name),
+		ID:                        fmt.Sprintf("%sn%d", strings.ToLower(nodeXname), index),
 		Type:                      "NodeHsnNic",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocHSNNIC",
@@ -342,7 +353,8 @@ func transformNetworkAdapter(adapter *redfish.NetworkAdapter) HWInventoryByLocat
 	}
 }
 
-func transformPSU(psu *redfish.PowerSupply) HWInventoryByLocation {
+// FIX: Add index parameter to construct the xname ID correctly.
+func transformPSU(psu *redfish.PowerSupply, chassisXname string, index int) HWInventoryByLocation {
 	manufacturer := strings.TrimSpace(psu.Manufacturer)
 	model := strings.TrimSpace(psu.Model)
 	partNumber := strings.TrimSpace(psu.PartNumber)
@@ -351,8 +363,7 @@ func transformPSU(psu *redfish.PowerSupply) HWInventoryByLocation {
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
 
 	return HWInventoryByLocation{
-		// FIX: Use the component's .Name field, which should contain the valid xname.
-		ID:                        strings.ToLower(psu.Name),
+		ID:                        fmt.Sprintf("%sps%d", strings.ToLower(chassisXname), index),
 		Type:                      "NodeEnclosurePowerSupply",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocNodeEnclosurePowerSupply",
