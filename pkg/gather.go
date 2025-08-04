@@ -131,22 +131,18 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 		}
 
 		for _, chassis := range chassisList {
-			// Gather Chassis-level FRUs like Power Supplies
 			power, _ := chassis.Power()
 			if power != nil {
 				for _, psu := range power.PowerSupplies {
 					if psu.Status.State == common.EnabledState {
-						// FIX: Pass the address of 'psu' (&psu) because the function expects a pointer.
 						fru := transformPSU(&psu, chassis.ID)
 						allHardware = append(allHardware, fru)
 					}
 				}
 			}
 
-			// Now get the systems within this chassis
 			systems, _ := chassis.ComputerSystems()
 			for _, system := range systems {
-				// Get Processors (CPUs and GPUs/Accelerators)
 				processors, _ := system.Processors()
 				for _, proc := range processors {
 					if proc.Status.State == common.EnabledState {
@@ -160,7 +156,6 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 					}
 				}
 
-				// Get Memory
 				memoryModules, _ := system.Memory()
 				for _, mem := range memoryModules {
 					if mem.Status.State == common.EnabledState {
@@ -169,7 +164,6 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 					}
 				}
 
-				// Get Storage Drives
 				storageControllers, _ := system.Storage()
 				for _, storage := range storageControllers {
 					drives, _ := storage.Drives()
@@ -181,7 +175,6 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 					}
 				}
 
-				// Get Network Adapters
 				netInterfaces, _ := system.NetworkInterfaces()
 				for _, nic := range netInterfaces {
 					adapter, _ := nic.NetworkAdapter()
@@ -194,8 +187,9 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 		}
 	}
 
-	payload := SMDHardwarePayload{Hardware: allHardware}
-	output, err := json.MarshalIndent(payload, "", "  ")
+	// FIX: Marshal the slice directly to produce a JSON array `[...]`
+	// instead of an object `{ "Hardware": [...] }`.
+	output, err := json.MarshalIndent(allHardware, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal final payload: %v", err)
 	}
