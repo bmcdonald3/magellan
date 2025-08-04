@@ -1,0 +1,47 @@
+{
+  "Hardware": [
+    {
+      "ID": "x1016c2s3b0n1p1",
+      "Type": "Processor",
+      "Status": "Populated",
+      "HWInventoryByLocationType": "HWInvByLocProcessor",
+      "ProcessorLocationInfo": {
+        "Socket": "CPU 0"
+      },
+      "PopulatedFRU": {
+        "FRUID": "Intel-E5-2690-SERIAL12345",
+        "Type": "Processor",
+        "HWInventoryByFRUType": "HWInvByFRUProcessor",
+        "ProcessorFRUInfo": {
+          "Manufacturer": "Intel(R) Corporation",
+          "Model": "Intel(R) Xeon(R) CPU E5-2690 v4 @ 2.60GHz",
+          "TotalCores": 14
+        }
+      }
+    },
+    {
+      "ID": "x1016c3s0b0n1d3",
+      "Type": "Memory",
+      "Status": "Populated",
+      "HWInventoryByLocationType": "HWInvByLocMemory",
+      "MemoryLocationInfo": {
+        "Socket": 1,
+        "MemoryController": 1,
+        "Channel": 1,
+        "Slot": 1
+      },
+      "PopulatedFRU": {
+        "FRUID": "Hynix-HMA84GR7MFR4N-UH-SERIAL67890",
+        "Type": "Memory",
+        "HWInventoryByFRUType": "HWInvByFRUMemory",
+        "MemoryFRUInfo": {
+          "Manufacturer": "Hynix",
+          "PartNumber": "HMA84GR7MFR4N-UH",
+          "SerialNumber": "SERIAL67890",
+          "CapacityMiB": 32768,
+          "MemoryDeviceType": "DDR4"
+        }
+      }
+    }
+  ]
+}
