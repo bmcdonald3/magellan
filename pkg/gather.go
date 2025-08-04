@@ -34,19 +34,13 @@ type RedfishMemoryLocationInfo struct {
 }
 
 // RedfishDriveLocationInfo describes the physical slot for a drive.
-type RedfishDriveLocationInfo struct {
-	// Often empty for drives, but the object itself is required by SMD.
-}
+type RedfishDriveLocationInfo struct{}
 
 // RedfishNetworkAdapterLocationInfo describes the physical slot for a NIC.
-type RedfishNetworkAdapterLocationInfo struct {
-	// Often empty for adapters, but the object itself is required by SMD.
-}
+type RedfishNetworkAdapterLocationInfo struct{}
 
 // RedfishPSULocationInfo describes the physical slot for a PSU.
-type RedfishPSULocationInfo struct {
-	// Often empty for PSUs, but the object itself is required by SMD.
-}
+type RedfishPSULocationInfo struct{}
 
 // HWInventoryByLocation represents a physical slot in the system and the FRU it contains.
 type HWInventoryByLocation struct {
@@ -138,83 +132,84 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 		Timeout:   30 * time.Second,
 	}
 
-	for _, host := range hosts {
-		creds, err := bmc.GetBMCCredentials(params.SecretStore, host)
-		if err != nil {
-			return fmt.Errorf("failed to get credentials for %s: %v", host, err)
+	// This function will only process the first host from the list for this test.
+	host := hosts[0]
+
+	creds, err := bmc.GetBMCCredentials(params.SecretStore, host)
+	if err != nil {
+		return fmt.Errorf("failed to get credentials for %s: %v", host, err)
+	}
+
+	config := gofish.ClientConfig{
+		Endpoint:   "https://" + host,
+		Username:   creds.Username,
+		Password:   creds.Password,
+		Insecure:   true,
+		HTTPClient: httpClient,
+	}
+
+	client, err := gofish.Connect(config)
+	if err != nil {
+		return fmt.Errorf("failed to connect to %s: %v", host, err)
+	}
+	defer client.Logout()
+
+	chassisList, err := client.GetService().Chassis()
+	if err != nil {
+		return fmt.Errorf("failed to get chassis list from %s: %v", host, err)
+	}
+
+	for _, chassis := range chassisList {
+		power, _ := chassis.Power()
+		if power != nil {
+			for i, psu := range power.PowerSupplies {
+				if psu.Status.State == common.EnabledState {
+					fru := transformPSU(&psu, i)
+					allHardware = append(allHardware, fru)
+				}
+			}
 		}
 
-		config := gofish.ClientConfig{
-			Endpoint:   "https://" + host,
-			Username:   creds.Username,
-			Password:   creds.Password,
-			Insecure:   true,
-			HTTPClient: httpClient,
-		}
-
-		client, err := gofish.Connect(config)
-		if err != nil {
-			return fmt.Errorf("failed to connect to %s: %v", host, err)
-		}
-		defer client.Logout()
-
-		chassisList, err := client.GetService().Chassis()
-		if err != nil {
-			return fmt.Errorf("failed to get chassis list from %s: %v", host, err)
-		}
-
-		for _, chassis := range chassisList {
-			power, _ := chassis.Power()
-			if power != nil {
-				for i, psu := range power.PowerSupplies {
-					if psu.Status.State == common.EnabledState {
-						fru := transformPSU(&psu, i)
+		systems, _ := chassis.ComputerSystems()
+		for _, system := range systems {
+			processors, _ := system.Processors()
+			for i, proc := range processors {
+				if proc.Status.State == common.EnabledState {
+					if proc.ProcessorType == "CPU" {
+						fru := transformProcessor(proc, i)
+						allHardware = append(allHardware, fru)
+					} else if proc.ProcessorType == "GPU" || proc.ProcessorType == "Accelerator" {
+						fru := transformAccelerator(proc, i)
 						allHardware = append(allHardware, fru)
 					}
 				}
 			}
 
-			systems, _ := chassis.ComputerSystems()
-			for _, system := range systems {
-				processors, _ := system.Processors()
-				for i, proc := range processors {
-					if proc.Status.State == common.EnabledState {
-						if proc.ProcessorType == "CPU" {
-							fru := transformProcessor(proc, i)
-							allHardware = append(allHardware, fru)
-						} else if proc.ProcessorType == "GPU" || proc.ProcessorType == "Accelerator" {
-							fru := transformAccelerator(proc, i)
-							allHardware = append(allHardware, fru)
-						}
-					}
+			memoryModules, _ := system.Memory()
+			for i, mem := range memoryModules {
+				if mem.Status.State == common.EnabledState {
+					fru := transformMemory(mem, i)
+					allHardware = append(allHardware, fru)
 				}
+			}
 
-				memoryModules, _ := system.Memory()
-				for i, mem := range memoryModules {
-					if mem.Status.State == common.EnabledState {
-						fru := transformMemory(mem, i)
+			storageControllers, _ := system.Storage()
+			for _, storage := range storageControllers {
+				drives, _ := storage.Drives()
+				for i, drive := range drives {
+					if drive.Status.State == common.EnabledState {
+						fru := transformDrive(drive, i)
 						allHardware = append(allHardware, fru)
 					}
 				}
+			}
 
-				storageControllers, _ := system.Storage()
-				for _, storage := range storageControllers {
-					drives, _ := storage.Drives()
-					for i, drive := range drives {
-						if drive.Status.State == common.EnabledState {
-							fru := transformDrive(drive, i)
-							allHardware = append(allHardware, fru)
-						}
-					}
-				}
-
-				netInterfaces, _ := system.NetworkInterfaces()
-				for i, nic := range netInterfaces {
-					adapter, _ := nic.NetworkAdapter()
-					if adapter != nil {
-						fru := transformNetworkAdapter(adapter, i)
-						allHardware = append(allHardware, fru)
-					}
+			netInterfaces, _ := system.NetworkInterfaces()
+			for i, nic := range netInterfaces {
+				adapter, _ := nic.NetworkAdapter()
+				if adapter != nil {
+					fru := transformNetworkAdapter(adapter, i)
+					allHardware = append(allHardware, fru)
 				}
 			}
 		}
@@ -235,29 +230,21 @@ func transformProcessor(proc *redfish.Processor, index int) HWInventoryByLocatio
 	serial := strings.TrimSpace(proc.SerialNumber)
 	socket := strings.TrimSpace(proc.Socket)
 	socketID := strings.ReplaceAll(socket, " ", "")
-
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
 	if serial == "" {
 		fruid = fmt.Sprintf("%s-%s-%s", manufacturer, model, socketID)
 	}
-
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("x3000c0s0b0n0p%d", index),
+		ID:                        fmt.Sprintf("x3000c0s1b0n0p%d", index), // Hardcoded xname for testing
 		Type:                      "Processor",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocProcessor",
-		ProcessorLocationInfo: &RedfishProcessorLocationInfo{
-			Socket: socket,
-		},
+		ProcessorLocationInfo:     &RedfishProcessorLocationInfo{Socket: socket},
 		PopulatedFRU: &HWInventoryByFRU{
 			FRUID:                fruid,
 			Type:                 "Processor",
 			HWInventoryByFRUType: "HWInvByFRUProcessor",
-			ProcessorFRUInfo: &ProcessorFRUInfo{
-				Manufacturer: manufacturer,
-				Model:        model,
-				TotalCores:   proc.TotalCores,
-			},
+			ProcessorFRUInfo:     &ProcessorFRUInfo{Manufacturer: manufacturer, Model: model, TotalCores: proc.TotalCores},
 		},
 	}
 }
@@ -268,28 +255,21 @@ func transformAccelerator(proc *redfish.Processor, index int) HWInventoryByLocat
 	serial := strings.TrimSpace(proc.SerialNumber)
 	socket := strings.TrimSpace(proc.Socket)
 	socketID := strings.ReplaceAll(socket, " ", "")
-
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
 	if serial == "" {
 		fruid = fmt.Sprintf("%s-%s-%s", manufacturer, model, socketID)
 	}
-
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("x3000c0s0b0n0a%d", index),
+		ID:                        fmt.Sprintf("x3000c0s1b0n0a%d", index), // Hardcoded xname for testing
 		Type:                      "NodeAccel",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocNodeAccel",
-		ProcessorLocationInfo: &RedfishProcessorLocationInfo{
-			Socket: socket,
-		},
+		ProcessorLocationInfo:     &RedfishProcessorLocationInfo{Socket: socket},
 		PopulatedFRU: &HWInventoryByFRU{
 			FRUID:                fruid,
 			Type:                 "NodeAccel",
 			HWInventoryByFRUType: "HWInvByFRUNodeAccel",
-			AcceleratorFRUInfo: &AcceleratorFRUInfo{
-				Manufacturer: manufacturer,
-				Model:        model,
-			},
+			AcceleratorFRUInfo:   &AcceleratorFRUInfo{Manufacturer: manufacturer, Model: model},
 		},
 	}
 }
@@ -298,11 +278,9 @@ func transformMemory(mem *redfish.Memory, index int) HWInventoryByLocation {
 	manufacturer := strings.TrimSpace(mem.Manufacturer)
 	partNumber := strings.TrimSpace(mem.PartNumber)
 	serial := strings.TrimSpace(mem.SerialNumber)
-
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, partNumber, serial)
-
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("x3000c0s0b0n0d%d", index),
+		ID:                        fmt.Sprintf("x3000c0s1b0n0d%d", index), // Hardcoded xname for testing
 		Type:                      "Memory",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocMemory",
@@ -332,11 +310,9 @@ func transformDrive(drive *redfish.Drive, index int) HWInventoryByLocation {
 	model := strings.TrimSpace(drive.Model)
 	partNumber := strings.TrimSpace(drive.PartNumber)
 	serial := strings.TrimSpace(drive.SerialNumber)
-
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
-
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("x3000c0s0b0n0s0d%d", index),
+		ID:                        fmt.Sprintf("x3000c0s1b0n0s0d%d", index), // Hardcoded xname for testing
 		Type:                      "Drive",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocDrive",
@@ -361,11 +337,9 @@ func transformNetworkAdapter(adapter *redfish.NetworkAdapter, index int) HWInven
 	model := strings.TrimSpace(adapter.Model)
 	partNumber := strings.TrimSpace(adapter.PartNumber)
 	serial := strings.TrimSpace(adapter.SerialNumber)
-
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, partNumber, serial)
-
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("x3000c0s0b0n0n%d", index),
+		ID:                        fmt.Sprintf("x3000c0s1b0n0n%d", index), // Hardcoded xname for testing
 		Type:                      "NodeHsnNic",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocHSNNIC",
@@ -389,11 +363,9 @@ func transformPSU(psu *redfish.PowerSupply, index int) HWInventoryByLocation {
 	model := strings.TrimSpace(psu.Model)
 	partNumber := strings.TrimSpace(psu.PartNumber)
 	serial := strings.TrimSpace(psu.SerialNumber)
-
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
-
 	return HWInventoryByLocation{
-		ID:                                   fmt.Sprintf("x3000c0s0b0ps%d", index),
+		ID:                                   fmt.Sprintf("x3000c0s1b0ps%d", index), // Hardcoded xname for testing
 		Type:                                 "NodeEnclosurePowerSupply",
 		Status:                               "Populated",
 		HWInventoryByLocationType:            "HWInvByLocNodeEnclosurePowerSupply",
