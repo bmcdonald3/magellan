@@ -118,8 +118,7 @@ type PSUFRUInfo struct {
 	PowerCapacityWatts float32 `json:"PowerCapacityWatts,omitempty"`
 }
 
-// GatherFRUInventory connects to a list of BMCs, gathers detailed FRU data,
-// transforms it into the SMD format, and prints it to standard output.
+// GatherFRUInventory now builds xnames based on discovery order and known patterns.
 func GatherFRUInventory(hosts []string, params *CollectParams) error {
 	var allHardware []HWInventoryByLocation
 
@@ -132,7 +131,9 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 		Timeout:   30 * time.Second,
 	}
 
+	// This prototype will process the first host and assume it belongs to a test cabinet (e.g., x3000)
 	host := hosts[0]
+	const cabinetID = 3000
 
 	creds, err := bmc.GetBMCCredentials(params.SecretStore, host)
 	if err != nil {
@@ -159,11 +160,14 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 	}
 
 	for chassisIndex, chassis := range chassisList {
+		// Assume a base xname for the chassis for testing purposes
+		chassisXname := fmt.Sprintf("x%dc%d", cabinetID, chassisIndex)
+
 		power, _ := chassis.Power()
 		if power != nil {
 			for i, psu := range power.PowerSupplies {
 				if psu.Status.State == common.EnabledState {
-					fru := transformPSU(&psu, chassisIndex, i)
+					fru := transformPSU(&psu, chassisXname, i)
 					allHardware = append(allHardware, fru)
 				}
 			}
@@ -171,8 +175,9 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 
 		systems, _ := chassis.ComputerSystems()
 		for systemIndex, system := range systems {
-			// Create a valid, hardcoded base xname for node components for testing
-			nodeXname := fmt.Sprintf("x3000c%ds%db0n%d", chassisIndex, 0, systemIndex)
+			// Assume a base xname for the node based on its parent chassis and its own index
+			// This makes a guess for slot and bmc numbers (s0b0).
+			nodeXname := fmt.Sprintf("%ss0b0n%d", chassisXname, systemIndex)
 
 			processors, _ := system.Processors()
 			for i, proc := range processors {
@@ -198,9 +203,9 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 			storageControllers, _ := system.Storage()
 			for storageIndex, storage := range storageControllers {
 				drives, _ := storage.Drives()
-				for i, drive := range drives {
+				for driveIndex, drive := range drives {
 					if drive.Status.State == common.EnabledState {
-						fru := transformDrive(drive, nodeXname, storageIndex, i)
+						fru := transformDrive(drive, nodeXname, storageIndex, driveIndex)
 						allHardware = append(allHardware, fru)
 					}
 				}
@@ -236,7 +241,7 @@ func transformProcessor(proc *redfish.Processor, nodeXname string, index int) HW
 		fruid = fmt.Sprintf("%s-%s-%s", manufacturer, model, strings.ReplaceAll(socket, " ", ""))
 	}
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("%sp%d", nodeXname, index),
+		ID:                        fmt.Sprintf("%sp%d", nodeXname, index), // Follows x...nNpP pattern
 		Type:                      "Processor",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocProcessor",
@@ -255,7 +260,7 @@ func transformAccelerator(proc *redfish.Processor, nodeXname string, index int) 
 		fruid = fmt.Sprintf("%s-%s-%s", manufacturer, model, strings.ReplaceAll(socket, " ", ""))
 	}
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("%sa%d", nodeXname, index),
+		ID:                        fmt.Sprintf("%sa%d", nodeXname, index), // Follows x...nNaA pattern
 		Type:                      "NodeAccel",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocNodeAccel",
@@ -270,7 +275,7 @@ func transformMemory(mem *redfish.Memory, nodeXname string, index int) HWInvento
 	serial := strings.TrimSpace(mem.SerialNumber)
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, partNumber, serial)
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("%sd%d", nodeXname, index),
+		ID:                        fmt.Sprintf("%sd%d", nodeXname, index), // Follows x...nNdD pattern
 		Type:                      "Memory",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocMemory",
@@ -291,7 +296,7 @@ func transformDrive(drive *redfish.Drive, nodeXname string, storageIndex int, dr
 	serial := strings.TrimSpace(drive.SerialNumber)
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("%ss%dd%d", nodeXname, storageIndex, driveIndex),
+		ID:                        fmt.Sprintf("%sg%dk%d", nodeXname, storageIndex, driveIndex), // Follows x...nNgGkK pattern
 		Type:                      "Drive",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocDrive",
@@ -307,7 +312,7 @@ func transformNetworkAdapter(adapter *redfish.NetworkAdapter, nodeXname string, 
 	serial := strings.TrimSpace(adapter.SerialNumber)
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, partNumber, serial)
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("%sh%d", nodeXname, index),
+		ID:                        fmt.Sprintf("%sh%d", nodeXname, index), // Follows x...nNhH pattern
 		Type:                      "NodeHsnNic",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocHSNNIC",
@@ -316,15 +321,15 @@ func transformNetworkAdapter(adapter *redfish.NetworkAdapter, nodeXname string, 
 	}
 }
 
-func transformPSU(psu *redfish.PowerSupply, chassisIndex int, psuIndex int) HWInventoryByLocation {
+func transformPSU(psu *redfish.PowerSupply, chassisXname string, psuIndex int) HWInventoryByLocation {
 	manufacturer := strings.TrimSpace(psu.Manufacturer)
 	model := strings.TrimSpace(psu.Model)
 	partNumber := strings.TrimSpace(psu.PartNumber)
 	serial := strings.TrimSpace(psu.SerialNumber)
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
 	return HWInventoryByLocation{
-		ID:                                   fmt.Sprintf("x3000c%dt%d", chassisIndex, psuIndex),
-		Type:                                 "CMMRectifier", // This type matches the xXcCtTT format
+		ID:                                   fmt.Sprintf("%st%d", chassisXname, psuIndex), // Follows x...cCtT pattern
+		Type:                                 "CMMRectifier",
 		Status:                               "Populated",
 		HWInventoryByLocationType:            "HWInvByLocCMMRectifier",
 		NodeEnclosurePowerSupplyLocationInfo: &RedfishPSULocationInfo{},
