@@ -20,13 +20,46 @@ type SMDHardwarePayload struct {
 	Hardware []HWInventoryByLocation `json:"Hardware"`
 }
 
+// RedfishProcessorLocationInfo describes the physical slot for a processor.
+type RedfishProcessorLocationInfo struct {
+	Socket string `json:"Socket,omitempty"`
+}
+
+// RedfishMemoryLocationInfo describes the physical slot for a memory DIMM.
+type RedfishMemoryLocationInfo struct {
+	Socket           int `json:"Socket,omitempty"`
+	MemoryController int `json:"MemoryController,omitempty"`
+	Channel          int `json:"Channel,omitempty"`
+	Slot             int `json:"Slot,omitempty"`
+}
+
+// RedfishDriveLocationInfo describes the physical slot for a drive.
+type RedfishDriveLocationInfo struct {
+	// Often empty for drives, but the object itself is required by SMD.
+}
+
+// RedfishNetworkAdapterLocationInfo describes the physical slot for a NIC.
+type RedfishNetworkAdapterLocationInfo struct {
+	// Often empty for adapters, but the object itself is required by SMD.
+}
+
+// RedfishPSULocationInfo describes the physical slot for a PSU.
+type RedfishPSULocationInfo struct {
+	// Often empty for PSUs, but the object itself is required by SMD.
+}
+
 // HWInventoryByLocation represents a physical slot in the system and the FRU it contains.
 type HWInventoryByLocation struct {
-	ID                        string            `json:"ID"`
-	Type                      string            `json:"Type"`
-	Status                    string            `json:"Status"`
-	HWInventoryByLocationType string            `json:"HWInventoryByLocationType"`
-	PopulatedFRU              *HWInventoryByFRU `json:"PopulatedFRU,omitempty"`
+	ID                                   string                             `json:"ID"`
+	Type                                 string                             `json:"Type"`
+	Status                               string                             `json:"Status"`
+	HWInventoryByLocationType            string                             `json:"HWInventoryByLocationType"`
+	PopulatedFRU                         *HWInventoryByFRU                  `json:"PopulatedFRU,omitempty"`
+	ProcessorLocationInfo                *RedfishProcessorLocationInfo      `json:"ProcessorLocationInfo,omitempty"`
+	MemoryLocationInfo                   *RedfishMemoryLocationInfo         `json:"MemoryLocationInfo,omitempty"`
+	DriveLocationInfo                    *RedfishDriveLocationInfo          `json:"DriveLocationInfo,omitempty"`
+	HSNNICLocationInfo                   *RedfishNetworkAdapterLocationInfo `json:"HSNNICLocationInfo,omitempty"`
+	NodeEnclosurePowerSupplyLocationInfo *RedfishPSULocationInfo            `json:"NodeEnclosurePowerSupplyLocationInfo,omitempty"`
 }
 
 // HWInventoryByFRU represents the actual physical piece of hardware.
@@ -209,11 +242,13 @@ func transformProcessor(proc *redfish.Processor, index int) HWInventoryByLocatio
 	}
 
 	return HWInventoryByLocation{
-		// FIX: Use a hardcoded, valid xname prefix for testing.
 		ID:                        fmt.Sprintf("x3000c0s0b0n0p%d", index),
 		Type:                      "Processor",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocProcessor",
+		ProcessorLocationInfo: &RedfishProcessorLocationInfo{
+			Socket: socket,
+		},
 		PopulatedFRU: &HWInventoryByFRU{
 			FRUID:                fruid,
 			Type:                 "Processor",
@@ -240,11 +275,13 @@ func transformAccelerator(proc *redfish.Processor, index int) HWInventoryByLocat
 	}
 
 	return HWInventoryByLocation{
-		// FIX: Use a hardcoded, valid xname prefix for testing.
 		ID:                        fmt.Sprintf("x3000c0s0b0n0a%d", index),
 		Type:                      "NodeAccel",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocNodeAccel",
+		ProcessorLocationInfo: &RedfishProcessorLocationInfo{
+			Socket: socket,
+		},
 		PopulatedFRU: &HWInventoryByFRU{
 			FRUID:                fruid,
 			Type:                 "NodeAccel",
@@ -265,11 +302,16 @@ func transformMemory(mem *redfish.Memory, index int) HWInventoryByLocation {
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, partNumber, serial)
 
 	return HWInventoryByLocation{
-		// FIX: Use a hardcoded, valid xname prefix for testing.
 		ID:                        fmt.Sprintf("x3000c0s0b0n0d%d", index),
 		Type:                      "Memory",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocMemory",
+		MemoryLocationInfo: &RedfishMemoryLocationInfo{
+			Socket:           mem.MemoryLocation.Socket,
+			MemoryController: mem.MemoryLocation.MemoryController,
+			Channel:          mem.MemoryLocation.Channel,
+			Slot:             mem.MemoryLocation.Slot,
+		},
 		PopulatedFRU: &HWInventoryByFRU{
 			FRUID:                fruid,
 			Type:                 "Memory",
@@ -294,11 +336,11 @@ func transformDrive(drive *redfish.Drive, index int) HWInventoryByLocation {
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
 
 	return HWInventoryByLocation{
-		// FIX: Use a hardcoded, valid xname prefix for testing.
 		ID:                        fmt.Sprintf("x3000c0s0b0n0s0d%d", index),
 		Type:                      "Drive",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocDrive",
+		DriveLocationInfo:         &RedfishDriveLocationInfo{},
 		PopulatedFRU: &HWInventoryByFRU{
 			FRUID:                fruid,
 			Type:                 "Drive",
@@ -323,11 +365,11 @@ func transformNetworkAdapter(adapter *redfish.NetworkAdapter, index int) HWInven
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, partNumber, serial)
 
 	return HWInventoryByLocation{
-		// FIX: Use a hardcoded, valid xname prefix for testing.
 		ID:                        fmt.Sprintf("x3000c0s0b0n0n%d", index),
 		Type:                      "NodeHsnNic",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocHSNNIC",
+		HSNNICLocationInfo:        &RedfishNetworkAdapterLocationInfo{},
 		PopulatedFRU: &HWInventoryByFRU{
 			FRUID:                fruid,
 			Type:                 "NodeHsnNic",
@@ -351,11 +393,11 @@ func transformPSU(psu *redfish.PowerSupply, index int) HWInventoryByLocation {
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
 
 	return HWInventoryByLocation{
-		// FIX: Use a hardcoded, valid xname prefix for testing.
-		ID:                        fmt.Sprintf("x3000c0s0b0ps%d", index),
-		Type:                      "NodeEnclosurePowerSupply",
-		Status:                    "Populated",
-		HWInventoryByLocationType: "HWInvByLocNodeEnclosurePowerSupply",
+		ID:                                   fmt.Sprintf("x3000c0s0b0ps%d", index),
+		Type:                                 "NodeEnclosurePowerSupply",
+		Status:                               "Populated",
+		HWInventoryByLocationType:            "HWInvByLocNodeEnclosurePowerSupply",
+		NodeEnclosurePowerSupplyLocationInfo: &RedfishPSULocationInfo{},
 		PopulatedFRU: &HWInventoryByFRU{
 			FRUID:                fruid,
 			Type:                 "NodeEnclosurePowerSupply",
