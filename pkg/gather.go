@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strings" // Added for string manipulation
+	"strings"
 	"time"
 
 	"github.com/OpenCHAMI/magellan/pkg/bmc"
@@ -31,15 +31,26 @@ type HWInventoryByLocation struct {
 
 // HWInventoryByFRU represents the actual physical piece of hardware.
 type HWInventoryByFRU struct {
-	FRUID                string            `json:"FRUID"`
-	Type                 string            `json:"Type"`
-	HWInventoryByFRUType string            `json:"HWInventoryByFRUType"`
-	ProcessorFRUInfo     *ProcessorFRUInfo `json:"ProcessorFRUInfo,omitempty"`
-	MemoryFRUInfo        *MemoryFRUInfo    `json:"MemoryFRUInfo,omitempty"`
+	FRUID                 string                 `json:"FRUID"`
+	Type                  string                 `json:"Type"`
+	HWInventoryByFRUType  string                 `json:"HWInventoryByFRUType"`
+	ProcessorFRUInfo      *ProcessorFRUInfo      `json:"ProcessorFRUInfo,omitempty"`
+	MemoryFRUInfo         *MemoryFRUInfo         `json:"MemoryFRUInfo,omitempty"`
+	DriveFRUInfo          *DriveFRUInfo          `json:"DriveFRUInfo,omitempty"`
+	NetworkAdapterFRUInfo *NetworkAdapterFRUInfo `json:"NetworkAdapterFRUInfo,omitempty"`
+	PSUFRUInfo            *PSUFRUInfo            `json:"PSUFRUInfo,omitempty"`
+	AcceleratorFRUInfo    *AcceleratorFRUInfo    `json:"AcceleratorFRUInfo,omitempty"`
 }
 
 // ProcessorFRUInfo contains descriptive metadata for a CPU.
 type ProcessorFRUInfo struct {
+	Manufacturer string `json:"Manufacturer,omitempty"`
+	Model        string `json:"Model,omitempty"`
+	TotalCores   int    `json:"TotalCores,omitempty"`
+}
+
+// AcceleratorFRUInfo contains descriptive metadata for a GPU/Accelerator.
+type AcceleratorFRUInfo struct {
 	Manufacturer string `json:"Manufacturer,omitempty"`
 	Model        string `json:"Model,omitempty"`
 	TotalCores   int    `json:"TotalCores,omitempty"`
@@ -54,14 +65,39 @@ type MemoryFRUInfo struct {
 	MemoryDeviceType string `json:"MemoryDeviceType,omitempty"`
 }
 
+// DriveFRUInfo contains descriptive metadata for a storage drive.
+type DriveFRUInfo struct {
+	Manufacturer  string `json:"Manufacturer,omitempty"`
+	Model         string `json:"Model,omitempty"`
+	PartNumber    string `json:"PartNumber,omitempty"`
+	SerialNumber  string `json:"SerialNumber,omitempty"`
+	CapacityBytes int64  `json:"CapacityBytes,omitempty"`
+}
+
+// NetworkAdapterFRUInfo contains descriptive metadata for a NIC.
+type NetworkAdapterFRUInfo struct {
+	Manufacturer string `json:"Manufacturer,omitempty"`
+	Model        string `json:"Model,omitempty"`
+	PartNumber   string `json:"PartNumber,omitempty"`
+	SerialNumber string `json:"SerialNumber,omitempty"`
+}
+
+// PSUFRUInfo contains descriptive metadata for a Power Supply Unit.
+type PSUFRUInfo struct {
+	Manufacturer       string  `json:"Manufacturer,omitempty"`
+	Model              string  `json:"Model,omitempty"`
+	PartNumber         string  `json:"PartNumber,omitempty"`
+	SerialNumber       string  `json:"SerialNumber,omitempty"`
+	PowerCapacityWatts float32 `json:"PowerCapacityWatts,omitempty"`
+}
+
 // GatherFRUInventory connects to a list of BMCs, gathers detailed FRU data,
 // transforms it into the SMD format, and prints it to standard output.
 func GatherFRUInventory(hosts []string, params *CollectParams) error {
 	var allHardware []HWInventoryByLocation
 
-	// Create a custom HTTP client with longer timeouts and proxy disabled.
 	tr := &http.Transport{
-		Proxy:           nil, // Do not use the system's http_proxy settings.
+		Proxy:           nil,
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
 	httpClient := &http.Client{
@@ -70,7 +106,6 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 	}
 
 	for _, host := range hosts {
-		// 1. Get credentials and connect to the BMC
 		creds, err := bmc.GetBMCCredentials(params.SecretStore, host)
 		if err != nil {
 			return fmt.Errorf("failed to get credentials for %s: %v", host, err)
@@ -81,7 +116,7 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 			Username:   creds.Username,
 			Password:   creds.Password,
 			Insecure:   true,
-			HTTPClient: httpClient, // Pass the custom client to gofish
+			HTTPClient: httpClient,
 		}
 
 		client, err := gofish.Connect(config)
@@ -90,28 +125,68 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 		}
 		defer client.Logout()
 
-		systems, err := client.GetService().Systems()
+		chassisList, err := client.GetService().Chassis()
 		if err != nil {
-			return fmt.Errorf("failed to get systems from %s: %v", host, err)
+			return fmt.Errorf("failed to get chassis list from %s: %v", host, err)
 		}
 
-		// 2. Gather Raw FRU Data from each system managed by the BMC
-		for _, system := range systems {
-			processors, err := system.Processors()
-			if err == nil {
-				for _, proc := range processors {
-					if proc.Status.State == common.EnabledState {
-						fru := transformProcessor(proc, system.ID)
+		for _, chassis := range chassisList {
+			// Gather Chassis-level FRUs like Power Supplies
+			power, _ := chassis.Power()
+			if power != nil {
+				for _, psu := range power.PowerSupplies {
+					if psu.Status.State == common.EnabledState {
+						// FIX: Pass the address of 'psu' (&psu) because the function expects a pointer.
+						fru := transformPSU(&psu, chassis.ID)
 						allHardware = append(allHardware, fru)
 					}
 				}
 			}
 
-			memoryModules, err := system.Memory()
-			if err == nil {
+			// Now get the systems within this chassis
+			systems, _ := chassis.ComputerSystems()
+			for _, system := range systems {
+				// Get Processors (CPUs and GPUs/Accelerators)
+				processors, _ := system.Processors()
+				for _, proc := range processors {
+					if proc.Status.State == common.EnabledState {
+						if proc.ProcessorType == "CPU" {
+							fru := transformProcessor(proc, system.ID)
+							allHardware = append(allHardware, fru)
+						} else if proc.ProcessorType == "GPU" || proc.ProcessorType == "Accelerator" {
+							fru := transformAccelerator(proc, system.ID)
+							allHardware = append(allHardware, fru)
+						}
+					}
+				}
+
+				// Get Memory
+				memoryModules, _ := system.Memory()
 				for _, mem := range memoryModules {
 					if mem.Status.State == common.EnabledState {
 						fru := transformMemory(mem, system.ID)
+						allHardware = append(allHardware, fru)
+					}
+				}
+
+				// Get Storage Drives
+				storageControllers, _ := system.Storage()
+				for _, storage := range storageControllers {
+					drives, _ := storage.Drives()
+					for _, drive := range drives {
+						if drive.Status.State == common.EnabledState {
+							fru := transformDrive(drive, system.ID, storage.ID)
+							allHardware = append(allHardware, fru)
+						}
+					}
+				}
+
+				// Get Network Adapters
+				netInterfaces, _ := system.NetworkInterfaces()
+				for _, nic := range netInterfaces {
+					adapter, _ := nic.NetworkAdapter()
+					if adapter != nil {
+						fru := transformNetworkAdapter(adapter, nic.ID, system.ID)
 						allHardware = append(allHardware, fru)
 					}
 				}
@@ -119,7 +194,6 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 		}
 	}
 
-	// 3. Create Final Payload and Print to Stdout
 	payload := SMDHardwarePayload{Hardware: allHardware}
 	output, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
@@ -127,18 +201,14 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 	}
 
 	fmt.Fprintln(os.Stdout, string(output))
-
 	return nil
 }
 
-// transformProcessor converts a gofish Processor object to an SMD-compatible struct
 func transformProcessor(proc *redfish.Processor, nodeXname string) HWInventoryByLocation {
-	// Refinement: Trim whitespace from all incoming strings
 	manufacturer := strings.TrimSpace(proc.Manufacturer)
 	model := strings.TrimSpace(proc.Model)
 	serial := strings.TrimSpace(proc.SerialNumber)
 	socket := strings.TrimSpace(proc.Socket)
-	// Refinement: Remove spaces from socket identifier for cleaner xnames
 	socketID := strings.ReplaceAll(socket, " ", "")
 
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
@@ -164,14 +234,40 @@ func transformProcessor(proc *redfish.Processor, nodeXname string) HWInventoryBy
 	}
 }
 
-// transformMemory converts a gofish Memory object to an SMD-compatible struct
+func transformAccelerator(proc *redfish.Processor, nodeXname string) HWInventoryByLocation {
+	manufacturer := strings.TrimSpace(proc.Manufacturer)
+	model := strings.TrimSpace(proc.Model)
+	serial := strings.TrimSpace(proc.SerialNumber)
+	socket := strings.TrimSpace(proc.Socket)
+	socketID := strings.ReplaceAll(socket, " ", "")
+
+	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
+	if serial == "" {
+		fruid = fmt.Sprintf("%s-%s-%s", manufacturer, model, socketID)
+	}
+
+	return HWInventoryByLocation{
+		ID:                        fmt.Sprintf("%sa%s", nodeXname, socketID), // Using 'a' for accelerator
+		Type:                      "NodeAccel",
+		Status:                    "Populated",
+		HWInventoryByLocationType: "HWInvByLocNodeAccel",
+		PopulatedFRU: &HWInventoryByFRU{
+			FRUID:                fruid,
+			Type:                 "NodeAccel",
+			HWInventoryByFRUType: "HWInvByFRUNodeAccel",
+			AcceleratorFRUInfo: &AcceleratorFRUInfo{
+				Manufacturer: manufacturer,
+				Model:        model,
+			},
+		},
+	}
+}
+
 func transformMemory(mem *redfish.Memory, nodeXname string) HWInventoryByLocation {
-	// Refinement: Trim whitespace from all incoming strings
 	manufacturer := strings.TrimSpace(mem.Manufacturer)
 	partNumber := strings.TrimSpace(mem.PartNumber)
 	serial := strings.TrimSpace(mem.SerialNumber)
 	deviceLocator := strings.TrimSpace(mem.DeviceLocator)
-	// Refinement: Remove spaces from locator for cleaner xnames
 	locatorID := strings.ReplaceAll(deviceLocator, " ", "")
 
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, partNumber, serial)
@@ -191,6 +287,89 @@ func transformMemory(mem *redfish.Memory, nodeXname string) HWInventoryByLocatio
 				SerialNumber:     serial,
 				CapacityMiB:      mem.CapacityMiB,
 				MemoryDeviceType: string(mem.MemoryDeviceType),
+			},
+		},
+	}
+}
+
+func transformDrive(drive *redfish.Drive, nodeXname, storageID string) HWInventoryByLocation {
+	manufacturer := strings.TrimSpace(drive.Manufacturer)
+	model := strings.TrimSpace(drive.Model)
+	partNumber := strings.TrimSpace(drive.PartNumber)
+	serial := strings.TrimSpace(drive.SerialNumber)
+
+	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
+
+	return HWInventoryByLocation{
+		ID:                        fmt.Sprintf("%s%sd%s", nodeXname, storageID, drive.ID), // e.g. NodeXname + StorageID + d + DriveID
+		Type:                      "Drive",
+		Status:                    "Populated",
+		HWInventoryByLocationType: "HWInvByLocDrive",
+		PopulatedFRU: &HWInventoryByFRU{
+			FRUID:                fruid,
+			Type:                 "Drive",
+			HWInventoryByFRUType: "HWInvByFRUDrive",
+			DriveFRUInfo: &DriveFRUInfo{
+				Manufacturer:  manufacturer,
+				Model:         model,
+				PartNumber:    partNumber,
+				SerialNumber:  serial,
+				CapacityBytes: drive.CapacityBytes,
+			},
+		},
+	}
+}
+
+func transformNetworkAdapter(adapter *redfish.NetworkAdapter, nicID, nodeXname string) HWInventoryByLocation {
+	manufacturer := strings.TrimSpace(adapter.Manufacturer)
+	model := strings.TrimSpace(adapter.Model)
+	partNumber := strings.TrimSpace(adapter.PartNumber)
+	serial := strings.TrimSpace(adapter.SerialNumber)
+
+	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, partNumber, serial)
+
+	return HWInventoryByLocation{
+		ID:                        fmt.Sprintf("%sn%s", nodeXname, nicID),
+		Type:                      "NodeHsnNic",
+		Status:                    "Populated",
+		HWInventoryByLocationType: "HWInvByLocHSNNIC",
+		PopulatedFRU: &HWInventoryByFRU{
+			FRUID:                fruid,
+			Type:                 "NodeHsnNic",
+			HWInventoryByFRUType: "HWInvByFRUHSNNIC",
+			NetworkAdapterFRUInfo: &NetworkAdapterFRUInfo{
+				Manufacturer: manufacturer,
+				Model:        model,
+				PartNumber:   partNumber,
+				SerialNumber: serial,
+			},
+		},
+	}
+}
+
+func transformPSU(psu *redfish.PowerSupply, chassisXname string) HWInventoryByLocation {
+	manufacturer := strings.TrimSpace(psu.Manufacturer)
+	model := strings.TrimSpace(psu.Model)
+	partNumber := strings.TrimSpace(psu.PartNumber)
+	serial := strings.TrimSpace(psu.SerialNumber)
+
+	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
+
+	return HWInventoryByLocation{
+		ID:                        fmt.Sprintf("%sps%s", chassisXname, psu.ID),
+		Type:                      "NodeEnclosurePowerSupply",
+		Status:                    "Populated",
+		HWInventoryByLocationType: "HWInvByLocNodeEnclosurePowerSupply",
+		PopulatedFRU: &HWInventoryByFRU{
+			FRUID:                fruid,
+			Type:                 "NodeEnclosurePowerSupply",
+			HWInventoryByFRUType: "HWInvByFRUNodeEnclosurePowerSupply",
+			PSUFRUInfo: &PSUFRUInfo{
+				Manufacturer:       manufacturer,
+				Model:              model,
+				PartNumber:         partNumber,
+				SerialNumber:       serial,
+				PowerCapacityWatts: psu.PowerCapacityWatts,
 			},
 		},
 	}
