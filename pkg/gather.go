@@ -187,8 +187,6 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 		}
 	}
 
-	// FIX: Marshal the slice directly to produce a JSON array `[...]`
-	// instead of an object `{ "Hardware": [...] }`.
 	output, err := json.MarshalIndent(allHardware, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal final payload: %v", err)
@@ -210,8 +208,9 @@ func transformProcessor(proc *redfish.Processor, nodeXname string) HWInventoryBy
 		fruid = fmt.Sprintf("%s-%s-%s", manufacturer, model, socketID)
 	}
 
+	// FIX: Use the component's .ID for the ordinal and convert parent to lowercase.
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("%sp%s", nodeXname, socketID),
+		ID:                        fmt.Sprintf("%sp%s", strings.ToLower(nodeXname), proc.ID),
 		Type:                      "Processor",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocProcessor",
@@ -240,8 +239,9 @@ func transformAccelerator(proc *redfish.Processor, nodeXname string) HWInventory
 		fruid = fmt.Sprintf("%s-%s-%s", manufacturer, model, socketID)
 	}
 
+	// FIX: Use the component's .ID for the ordinal and convert parent to lowercase.
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("%sa%s", nodeXname, socketID), // Using 'a' for accelerator
+		ID:                        fmt.Sprintf("%sa%s", strings.ToLower(nodeXname), proc.ID),
 		Type:                      "NodeAccel",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocNodeAccel",
@@ -261,13 +261,12 @@ func transformMemory(mem *redfish.Memory, nodeXname string) HWInventoryByLocatio
 	manufacturer := strings.TrimSpace(mem.Manufacturer)
 	partNumber := strings.TrimSpace(mem.PartNumber)
 	serial := strings.TrimSpace(mem.SerialNumber)
-	deviceLocator := strings.TrimSpace(mem.DeviceLocator)
-	locatorID := strings.ReplaceAll(deviceLocator, " ", "")
 
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, partNumber, serial)
 
+	// FIX: Use the component's .ID for the ordinal and convert parent to lowercase.
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("%sd%s", nodeXname, locatorID),
+		ID:                        fmt.Sprintf("%sd%s", strings.ToLower(nodeXname), mem.ID),
 		Type:                      "Memory",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocMemory",
@@ -294,8 +293,9 @@ func transformDrive(drive *redfish.Drive, nodeXname, storageID string) HWInvento
 
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
 
+	// FIX: Use the component's .ID for the ordinal and convert parents to lowercase.
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("%s%sd%s", nodeXname, storageID, drive.ID), // e.g. NodeXname + StorageID + d + DriveID
+		ID:                        fmt.Sprintf("%s%sd%s", strings.ToLower(nodeXname), strings.ToLower(storageID), drive.ID),
 		Type:                      "Drive",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocDrive",
@@ -322,8 +322,9 @@ func transformNetworkAdapter(adapter *redfish.NetworkAdapter, nicID, nodeXname s
 
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, partNumber, serial)
 
+	// FIX: Use the component's .ID for the ordinal and convert parent to lowercase.
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("%sn%s", nodeXname, nicID),
+		ID:                        fmt.Sprintf("%sn%s", strings.ToLower(nodeXname), nicID),
 		Type:                      "NodeHsnNic",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocHSNNIC",
@@ -349,8 +350,9 @@ func transformPSU(psu *redfish.PowerSupply, chassisXname string) HWInventoryByLo
 
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
 
+	// FIX: Use the component's .ID for the ordinal and convert parent to lowercase.
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("%sps%s", chassisXname, psu.ID),
+		ID:                        fmt.Sprintf("%sps%s", strings.ToLower(chassisXname), psu.ID),
 		Type:                      "NodeEnclosurePowerSupply",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocNodeEnclosurePowerSupply",
