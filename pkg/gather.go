@@ -222,7 +222,11 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 		}
 	}
 
-	output, err := json.MarshalIndent(allHardware, "", "  ")
+	payload := SMDHardwarePayload{
+		Hardware: allHardware,
+	}
+
+	output, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal final payload: %v", err)
 	}
