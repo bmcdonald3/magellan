@@ -1,0 +1,22 @@
+{
+    "Hardware": [
+      {
+        "ID": "x3000c0s0b0n0d1",
+        "Type": "Memory",
+        "Status": "Populated",
+        "HWInventoryByLocationType": "HWInvByLocMemory",
+        "PopulatedFRU": {
+          "FRUID": "Hynix-HMA42GR7AFR4N-UH-3128C51A",
+          "Type": "Memory",
+          "HWInventoryByFRUType": "HWInvByFRUMemory",
+          "MemoryFRUInfo": {
+            "Manufacturer": "Hynix",
+            "PartNumber": "HMA42GR7AFR4N-UH",
+            "SerialNumber": "3128C51A",
+            "CapacityMiB": 16384,
+            "MemoryDeviceType": "DDR4"
+          }
+        }
+      }
+    ]
+  }
