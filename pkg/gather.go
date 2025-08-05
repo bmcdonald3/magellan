@@ -51,7 +51,7 @@ type HWInventoryByFRU struct {
 	MemoryFRUInfo         *MemoryFRUInfo         `json:"MemoryFRUInfo,omitempty"`
 	DriveFRUInfo          *DriveFRUInfo          `json:"DriveFRUInfo,omitempty"`
 	NetworkAdapterFRUInfo *NetworkAdapterFRUInfo `json:"NetworkAdapterFRUInfo,omitempty"`
-	PSUFRUInfo            *PSUFRUInfo            `json:"PSUFRUInfo,omitempty"`
+	CMMRectifierFRUInfo   *CMMRectifierFRUInfo   `json:"CMMRectifierFRUInfo,omitempty"` // CORRECTED
 	AcceleratorFRUInfo    *AcceleratorFRUInfo    `json:"AcceleratorFRUInfo,omitempty"`
 }
 
@@ -94,13 +94,14 @@ type NetworkAdapterFRUInfo struct {
 	SerialNumber string `json:"SerialNumber,omitempty"`
 }
 
-// PSUFRUInfo contains descriptive metadata for a Power Supply Unit.
-type PSUFRUInfo struct {
+// CMMRectifierFRUInfo contains descriptive metadata for a Power Supply Unit.
+// RENAMED from PSUFRUInfo
+type CMMRectifierFRUInfo struct {
 	Manufacturer       string  `json:"Manufacturer,omitempty"`
 	Model              string  `json:"Model,omitempty"`
 	PartNumber         string  `json:"PartNumber,omitempty"`
 	SerialNumber       string  `json:"SerialNumber,omitempty"`
-	PowerCapacityWatts float32 `json:"PowerCapacityWatts,omitempty"`
+	PowerCapacityWatts float32 `json:"PowerCapacityWatts"` // omitempty removed
 }
 
 // GatherFRUInventory now builds the correct JSON structure using maps.
@@ -300,7 +301,7 @@ func transformMemory(mem *redfish.Memory, nodeXname string, index int) map[strin
 			},
 		},
 	}
-	// Only add location info if the data is present
+
 	if mem.MemoryLocation.Socket != 0 || mem.MemoryLocation.MemoryController != 0 || mem.MemoryLocation.Channel != 0 || mem.MemoryLocation.Slot != 0 {
 		component["MemoryLocationInfo"] = &RedfishMemoryLocationInfo{
 			Socket:           mem.MemoryLocation.Socket,
@@ -386,7 +387,7 @@ func transformPSU(psu *redfish.PowerSupply, chassisXname string, psuIndex int) m
 			FRUID:                fruid,
 			Type:                 "CMMRectifier",
 			HWInventoryByFRUType: "HWInvByFRUCMMRectifier",
-			PSUFRUInfo: &PSUFRUInfo{
+			CMMRectifierFRUInfo: &CMMRectifierFRUInfo{ // CORRECTED
 				Manufacturer:       manufacturer,
 				Model:              model,
 				PartNumber:         partNumber,
