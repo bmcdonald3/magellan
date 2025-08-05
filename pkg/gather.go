@@ -278,18 +278,36 @@ func transformMemory(mem *redfish.Memory, nodeXname string, index int) HWInvento
 	partNumber := strings.TrimSpace(mem.PartNumber)
 	serial := strings.TrimSpace(mem.SerialNumber)
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, partNumber, serial)
+
+	// Check if any of the MemoryLocation fields are populated. If not, omit the entire object.
+	var memLocationInfo *RedfishMemoryLocationInfo
+	if mem.MemoryLocation.Socket != 0 || mem.MemoryLocation.MemoryController != 0 || mem.MemoryLocation.Channel != 0 || mem.MemoryLocation.Slot != 0 {
+		memLocationInfo = &RedfishMemoryLocationInfo{
+			Socket:           mem.MemoryLocation.Socket,
+			MemoryController: mem.MemoryLocation.MemoryController,
+			Channel:          mem.MemoryLocation.Channel,
+			Slot:             mem.MemoryLocation.Slot,
+		}
+	}
+
 	return HWInventoryByLocation{
 		ID:                        fmt.Sprintf("%sd%d", nodeXname, index), // Follows x...nNdD pattern
 		Type:                      "Memory",
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocMemory",
-		MemoryLocationInfo: &RedfishMemoryLocationInfo{
-			Socket:           mem.MemoryLocation.Socket,
-			MemoryController: mem.MemoryLocation.MemoryController,
-			Channel:          mem.MemoryLocation.Channel,
-			Slot:             mem.MemoryLocation.Slot,
+		MemoryLocationInfo:        memLocationInfo,
+		PopulatedFRU: &HWInventoryByFRU{
+			FRUID:                fruid,
+			Type:                 "Memory",
+			HWInventoryByFRUType: "HWInvByFRUMemory",
+			MemoryFRUInfo: &MemoryFRUInfo{
+				Manufacturer:     manufacturer,
+				PartNumber:       partNumber,
+				SerialNumber:     serial,
+				CapacityMiB:      mem.CapacityMiB,
+				MemoryDeviceType: string(mem.MemoryDeviceType),
+			},
 		},
-		PopulatedFRU: &HWInventoryByFRU{FRUID: fruid, Type: "Memory", HWInventoryByFRUType: "HWInvByFRUMemory", MemoryFRUInfo: &MemoryFRUInfo{Manufacturer: manufacturer, PartNumber: partNumber, SerialNumber: serial, CapacityMiB: mem.CapacityMiB, MemoryDeviceType: string(mem.MemoryDeviceType)}},
 	}
 }
 
