@@ -8,7 +8,7 @@
           "FRUID": "SOLUM CO., LTD.-PSSF222201A-CNS2221A4AHBB0503",
           "Type": "CMMRectifier",
           "HWInventoryByFRUType": "HWInvByFRUCMMRectifier",
-          "PSUFRUInfo": {
+          "CMMRectifierFRUInfo": {
             "Manufacturer": "SOLUM CO., LTD.",
             "Model": "PSSF222201A",
             "PartNumber": "H66158-011",
