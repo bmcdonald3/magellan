@@ -16,7 +16,9 @@
             "SerialNumber": "CNS2221A4AHBB0503"
           }
         },
-        "NodeEnclosurePowerSupplyLocationInfo": {}
+        "LocationInfo": {
+          "CMMRectifierLocationInfo": {}
+        }
       }
     ]
   }
