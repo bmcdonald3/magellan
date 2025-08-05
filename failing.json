@@ -1,10 +1,9 @@
 {
     "Hardware": [
       {
-        "ID": "x3000c2t0",
-        "Type": "CMMRectifier",
-        "Status": "Populated",
+        "CMMRectifierLocationInfo": {},
         "HWInventoryByLocationType": "HWInvByLocCMMRectifier",
+        "ID": "x3000c2t0",
         "PopulatedFRU": {
           "FRUID": "SOLUM CO., LTD.-PSSF222201A-CNS2221A4AHBB0503",
           "Type": "CMMRectifier",
@@ -13,12 +12,12 @@
             "Manufacturer": "SOLUM CO., LTD.",
             "Model": "PSSF222201A",
             "PartNumber": "H66158-011",
-            "SerialNumber": "CNS2221A4AHBB0503"
+            "SerialNumber": "CNS2221A4AHBB0503",
+            "PowerCapacityWatts": 0
           }
         },
-        "LocationInfo": {
-          "CMMRectifierLocationInfo": {}
-        }
+        "Status": "Populated",
+        "Type": "CMMRectifier"
       }
     ]
   }
