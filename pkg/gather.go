@@ -44,16 +44,15 @@ type RedfishPSULocationInfo struct{}
 
 // HWInventoryByLocation represents a physical slot in the system and the FRU it contains.
 type HWInventoryByLocation struct {
-	ID                                   string                             `json:"ID"`
-	Type                                 string                             `json:"Type"`
-	Status                               string                             `json:"Status"`
-	HWInventoryByLocationType            string                             `json:"HWInventoryByLocationType"`
-	PopulatedFRU                         *HWInventoryByFRU                  `json:"PopulatedFRU,omitempty"`
-	ProcessorLocationInfo                *RedfishProcessorLocationInfo      `json:"ProcessorLocationInfo,omitempty"`
-	MemoryLocationInfo                   *RedfishMemoryLocationInfo         `json:"MemoryLocationInfo,omitempty"`
-	DriveLocationInfo                    *RedfishDriveLocationInfo          `json:"DriveLocationInfo,omitempty"`
-	HSNNICLocationInfo                   *RedfishNetworkAdapterLocationInfo `json:"HSNNICLocationInfo,omitempty"`
-	NodeEnclosurePowerSupplyLocationInfo *RedfishPSULocationInfo            `json:"NodeEnclosurePowerSupplyLocationInfo,omitempty"`
+	ID                        string            `json:"ID"`
+	Type                      string            `json:"Type"`
+	Status                    string            `json:"Status"`
+	HWInventoryByLocationType string            `json:"HWInventoryByLocationType"`
+	PopulatedFRU              *HWInventoryByFRU `json:"PopulatedFRU,omitempty"`
+
+	// This map will be "inlined" into the HWInventoryByLocation JSON object.
+	// It will hold the dynamically named location info, e.g., {"CMMRectifierLocationInfo": {...}}.
+	LocationInfo map[string]interface{} `json:",inline"`
 }
 
 // HWInventoryByFRU represents the actual physical piece of hardware.
@@ -244,13 +243,29 @@ func transformProcessor(proc *redfish.Processor, nodeXname string, index int) HW
 	if serial == "" {
 		fruid = fmt.Sprintf("%s-%s-%s", manufacturer, model, strings.ReplaceAll(socket, " ", ""))
 	}
+
+	componentType := "Processor"
+	locationInfoKey := "ProcessorLocationInfo" // Derived from HWInvByLocProcessor
+	locationInfo := map[string]interface{}{
+		locationInfoKey: &RedfishProcessorLocationInfo{Socket: socket},
+	}
+
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("%sp%d", nodeXname, index), // Follows x...nNpP pattern
-		Type:                      "Processor",
+		ID:                        fmt.Sprintf("%sp%d", nodeXname, index),
+		Type:                      componentType,
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocProcessor",
-		ProcessorLocationInfo:     &RedfishProcessorLocationInfo{Socket: socket},
-		PopulatedFRU:              &HWInventoryByFRU{FRUID: fruid, Type: "Processor", HWInventoryByFRUType: "HWInvByFRUProcessor", ProcessorFRUInfo: &ProcessorFRUInfo{Manufacturer: manufacturer, Model: model, TotalCores: proc.TotalCores}},
+		LocationInfo:              locationInfo,
+		PopulatedFRU: &HWInventoryByFRU{
+			FRUID:                fruid,
+			Type:                 componentType,
+			HWInventoryByFRUType: "HWInvByFRUProcessor",
+			ProcessorFRUInfo: &ProcessorFRUInfo{
+				Manufacturer: manufacturer,
+				Model:        model,
+				TotalCores:   proc.TotalCores,
+			},
+		},
 	}
 }
 
@@ -263,13 +278,29 @@ func transformAccelerator(proc *redfish.Processor, nodeXname string, index int) 
 	if serial == "" {
 		fruid = fmt.Sprintf("%s-%s-%s", manufacturer, model, strings.ReplaceAll(socket, " ", ""))
 	}
+
+	componentType := "NodeAccel"
+	locationInfoKey := "NodeAccelLocationInfo" // Derived from HWInvByLocNodeAccel
+	locationInfo := map[string]interface{}{
+		// The original code used RedfishProcessorLocationInfo for accelerators, we maintain that here for the value.
+		locationInfoKey: &RedfishProcessorLocationInfo{Socket: socket},
+	}
+
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("%sa%d", nodeXname, index), // Follows x...nNaA pattern
-		Type:                      "NodeAccel",
+		ID:                        fmt.Sprintf("%sa%d", nodeXname, index),
+		Type:                      componentType,
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocNodeAccel",
-		ProcessorLocationInfo:     &RedfishProcessorLocationInfo{Socket: socket},
-		PopulatedFRU:              &HWInventoryByFRU{FRUID: fruid, Type: "NodeAccel", HWInventoryByFRUType: "HWInvByFRUNodeAccel", AcceleratorFRUInfo: &AcceleratorFRUInfo{Manufacturer: manufacturer, Model: model}},
+		LocationInfo:              locationInfo,
+		PopulatedFRU: &HWInventoryByFRU{
+			FRUID:                fruid,
+			Type:                 componentType,
+			HWInventoryByFRUType: "HWInvByFRUNodeAccel",
+			AcceleratorFRUInfo: &AcceleratorFRUInfo{
+				Manufacturer: manufacturer,
+				Model:        model,
+			},
+		},
 	}
 }
 
@@ -279,26 +310,31 @@ func transformMemory(mem *redfish.Memory, nodeXname string, index int) HWInvento
 	serial := strings.TrimSpace(mem.SerialNumber)
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, partNumber, serial)
 
-	// Check if any of the MemoryLocation fields are populated. If not, omit the entire object.
-	var memLocationInfo *RedfishMemoryLocationInfo
+	componentType := "Memory"
+	var locationInfo map[string]interface{}
+
+	// Per original logic, only add location info if the data is present in Redfish.
 	if mem.MemoryLocation.Socket != 0 || mem.MemoryLocation.MemoryController != 0 || mem.MemoryLocation.Channel != 0 || mem.MemoryLocation.Slot != 0 {
-		memLocationInfo = &RedfishMemoryLocationInfo{
-			Socket:           mem.MemoryLocation.Socket,
-			MemoryController: mem.MemoryLocation.MemoryController,
-			Channel:          mem.MemoryLocation.Channel,
-			Slot:             mem.MemoryLocation.Slot,
+		locationInfoKey := "MemoryLocationInfo" // Derived from HWInvByLocMemory
+		locationInfo = map[string]interface{}{
+			locationInfoKey: &RedfishMemoryLocationInfo{
+				Socket:           mem.MemoryLocation.Socket,
+				MemoryController: mem.MemoryLocation.MemoryController,
+				Channel:          mem.MemoryLocation.Channel,
+				Slot:             mem.MemoryLocation.Slot,
+			},
 		}
 	}
 
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("%sd%d", nodeXname, index), // Follows x...nNdD pattern
-		Type:                      "Memory",
+		ID:                        fmt.Sprintf("%sd%d", nodeXname, index),
+		Type:                      componentType,
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocMemory",
-		MemoryLocationInfo:        memLocationInfo,
+		LocationInfo:              locationInfo, // Will be nil if no location data, so it won't be marshalled.
 		PopulatedFRU: &HWInventoryByFRU{
 			FRUID:                fruid,
-			Type:                 "Memory",
+			Type:                 componentType,
 			HWInventoryByFRUType: "HWInvByFRUMemory",
 			MemoryFRUInfo: &MemoryFRUInfo{
 				Manufacturer:     manufacturer,
@@ -310,20 +346,37 @@ func transformMemory(mem *redfish.Memory, nodeXname string, index int) HWInvento
 		},
 	}
 }
-
 func transformDrive(drive *redfish.Drive, nodeXname string, storageIndex int, driveIndex int) HWInventoryByLocation {
 	manufacturer := strings.TrimSpace(drive.Manufacturer)
 	model := strings.TrimSpace(drive.Model)
 	partNumber := strings.TrimSpace(drive.PartNumber)
 	serial := strings.TrimSpace(drive.SerialNumber)
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
+
+	componentType := "Drive"
+	locationInfoKey := "DriveLocationInfo" // Derived from HWInvByLocDrive
+	locationInfo := map[string]interface{}{
+		locationInfoKey: &RedfishDriveLocationInfo{},
+	}
+
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("%sg%dk%d", nodeXname, storageIndex, driveIndex), // Follows x...nNgGkK pattern
-		Type:                      "Drive",
+		ID:                        fmt.Sprintf("%sg%dk%d", nodeXname, storageIndex, driveIndex),
+		Type:                      componentType,
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocDrive",
-		DriveLocationInfo:         &RedfishDriveLocationInfo{},
-		PopulatedFRU:              &HWInventoryByFRU{FRUID: fruid, Type: "Drive", HWInventoryByFRUType: "HWInvByFRUDrive", DriveFRUInfo: &DriveFRUInfo{Manufacturer: manufacturer, Model: model, PartNumber: partNumber, SerialNumber: serial, CapacityBytes: drive.CapacityBytes}},
+		LocationInfo:              locationInfo,
+		PopulatedFRU: &HWInventoryByFRU{
+			FRUID:                fruid,
+			Type:                 componentType,
+			HWInventoryByFRUType: "HWInvByFRUDrive",
+			DriveFRUInfo: &DriveFRUInfo{
+				Manufacturer:  manufacturer,
+				Model:         model,
+				PartNumber:    partNumber,
+				SerialNumber:  serial,
+				CapacityBytes: drive.CapacityBytes,
+			},
+		},
 	}
 }
 
@@ -333,13 +386,30 @@ func transformNetworkAdapter(adapter *redfish.NetworkAdapter, nodeXname string, 
 	partNumber := strings.TrimSpace(adapter.PartNumber)
 	serial := strings.TrimSpace(adapter.SerialNumber)
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, partNumber, serial)
+
+	componentType := "NodeHsnNic"
+	locationInfoKey := "HSNNICLocationInfo" // Derived from HWInvByLocHSNNIC
+	locationInfo := map[string]interface{}{
+		locationInfoKey: &RedfishNetworkAdapterLocationInfo{},
+	}
+
 	return HWInventoryByLocation{
-		ID:                        fmt.Sprintf("%sh%d", nodeXname, index), // Follows x...nNhH pattern
-		Type:                      "NodeHsnNic",
+		ID:                        fmt.Sprintf("%sh%d", nodeXname, index),
+		Type:                      componentType,
 		Status:                    "Populated",
 		HWInventoryByLocationType: "HWInvByLocHSNNIC",
-		HSNNICLocationInfo:        &RedfishNetworkAdapterLocationInfo{},
-		PopulatedFRU:              &HWInventoryByFRU{FRUID: fruid, Type: "NodeHsnNic", HWInventoryByFRUType: "HWInvByFRUHSNNIC", NetworkAdapterFRUInfo: &NetworkAdapterFRUInfo{Manufacturer: manufacturer, Model: model, PartNumber: partNumber, SerialNumber: serial}},
+		LocationInfo:              locationInfo,
+		PopulatedFRU: &HWInventoryByFRU{
+			FRUID:                fruid,
+			Type:                 componentType,
+			HWInventoryByFRUType: "HWInvByFRUHSNNIC",
+			NetworkAdapterFRUInfo: &NetworkAdapterFRUInfo{
+				Manufacturer: manufacturer,
+				Model:        model,
+				PartNumber:   partNumber,
+				SerialNumber: serial,
+			},
+		},
 	}
 }
 
@@ -349,12 +419,30 @@ func transformPSU(psu *redfish.PowerSupply, chassisXname string, psuIndex int) H
 	partNumber := strings.TrimSpace(psu.PartNumber)
 	serial := strings.TrimSpace(psu.SerialNumber)
 	fruid := fmt.Sprintf("%s-%s-%s", manufacturer, model, serial)
+	componentType := "CMMRectifier" // Define type once
+
+	// Create the dynamically-keyed location info map
+	locationInfo := make(map[string]interface{})
+	locationKey := fmt.Sprintf("%sLocationInfo", componentType) // Creates "CMMRectifierLocationInfo"
+	locationInfo[locationKey] = &RedfishPSULocationInfo{}       // Use the existing struct for the value
+
 	return HWInventoryByLocation{
-		ID:                                   fmt.Sprintf("%st%d", chassisXname, psuIndex), // Follows x...cCtT pattern
-		Type:                                 "CMMRectifier",
-		Status:                               "Populated",
-		HWInventoryByLocationType:            "HWInvByLocCMMRectifier",
-		NodeEnclosurePowerSupplyLocationInfo: &RedfishPSULocationInfo{},
-		PopulatedFRU:                         &HWInventoryByFRU{FRUID: fruid, Type: "CMMRectifier", HWInventoryByFRUType: "HWInvByFRUCMMRectifier", PSUFRUInfo: &PSUFRUInfo{Manufacturer: manufacturer, Model: model, PartNumber: partNumber, SerialNumber: serial, PowerCapacityWatts: psu.PowerCapacityWatts}},
+		ID:                        fmt.Sprintf("%st%d", chassisXname, psuIndex),
+		Type:                      componentType,
+		Status:                    "Populated",
+		HWInventoryByLocationType: "HWInvByLocCMMRectifier",
+		LocationInfo:              locationInfo, // Assign the map here
+		PopulatedFRU: &HWInventoryByFRU{
+			FRUID:                fruid,
+			Type:                 componentType,
+			HWInventoryByFRUType: "HWInvByFRUCMMRectifier",
+			PSUFRUInfo: &PSUFRUInfo{
+				Manufacturer:       manufacturer,
+				Model:              model,
+				PartNumber:         partNumber,
+				SerialNumber:       serial,
+				PowerCapacityWatts: psu.PowerCapacityWatts,
+			},
+		},
 	}
 }
