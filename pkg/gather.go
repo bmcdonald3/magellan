@@ -15,17 +15,14 @@ import (
 	"github.com/stmcginnis/gofish/redfish"
 )
 
-// SMDHardwarePayload is the top-level object for the SMD /Inventory/Hardware endpoint.
 type SMDHardwarePayload struct {
 	Hardware []interface{} `json:"Hardware"`
 }
 
-// RedfishProcessorLocationInfo describes the physical slot for a processor.
 type RedfishProcessorLocationInfo struct {
 	Socket string `json:"Socket,omitempty"`
 }
 
-// RedfishMemoryLocationInfo describes the physical slot for a memory DIMM.
 type RedfishMemoryLocationInfo struct {
 	Socket           int `json:"Socket,omitempty"`
 	MemoryController int `json:"MemoryController,omitempty"`
@@ -33,16 +30,12 @@ type RedfishMemoryLocationInfo struct {
 	Slot             int `json:"Slot,omitempty"`
 }
 
-// RedfishDriveLocationInfo describes the physical slot for a drive.
 type RedfishDriveLocationInfo struct{}
 
-// RedfishNetworkAdapterLocationInfo describes the physical slot for a NIC.
 type RedfishNetworkAdapterLocationInfo struct{}
 
-// RedfishPSULocationInfo describes the physical slot for a PSU.
 type RedfishPSULocationInfo struct{}
 
-// HWInventoryByFRU represents the actual physical piece of hardware.
 type HWInventoryByFRU struct {
 	FRUID                 string                 `json:"FRUID"`
 	Type                  string                 `json:"Type"`
@@ -55,20 +48,17 @@ type HWInventoryByFRU struct {
 	AcceleratorFRUInfo    *AcceleratorFRUInfo    `json:"AcceleratorFRUInfo,omitempty"`
 }
 
-// ProcessorFRUInfo contains descriptive metadata for a CPU.
 type ProcessorFRUInfo struct {
 	Manufacturer string `json:"Manufacturer,omitempty"`
 	Model        string `json:"Model,omitempty"`
 	TotalCores   int    `json:"TotalCores,omitempty"`
 }
 
-// AcceleratorFRUInfo contains descriptive metadata for a GPU/Accelerator.
 type AcceleratorFRUInfo struct {
 	Manufacturer string `json:"Manufacturer,omitempty"`
 	Model        string `json:"Model,omitempty"`
 }
 
-// MemoryFRUInfo contains descriptive metadata for a DIMM.
 type MemoryFRUInfo struct {
 	Manufacturer     string `json:"Manufacturer,omitempty"`
 	PartNumber       string `json:"PartNumber,omitempty"`
@@ -77,7 +67,6 @@ type MemoryFRUInfo struct {
 	MemoryDeviceType string `json:"MemoryDeviceType,omitempty"`
 }
 
-// DriveFRUInfo contains descriptive metadata for a storage drive.
 type DriveFRUInfo struct {
 	Manufacturer  string `json:"Manufacturer,omitempty"`
 	Model         string `json:"Model,omitempty"`
@@ -86,7 +75,6 @@ type DriveFRUInfo struct {
 	CapacityBytes int64  `json:"CapacityBytes,omitempty"`
 }
 
-// NetworkAdapterFRUInfo contains descriptive metadata for a NIC.
 type NetworkAdapterFRUInfo struct {
 	Manufacturer string `json:"Manufacturer,omitempty"`
 	Model        string `json:"Model,omitempty"`
@@ -94,8 +82,6 @@ type NetworkAdapterFRUInfo struct {
 	SerialNumber string `json:"SerialNumber,omitempty"`
 }
 
-// CMMRectifierFRUInfo contains descriptive metadata for a Power Supply Unit.
-// RENAMED from PSUFRUInfo
 type CMMRectifierFRUInfo struct {
 	Manufacturer       string  `json:"Manufacturer,omitempty"`
 	Model              string  `json:"Model,omitempty"`
@@ -104,7 +90,6 @@ type CMMRectifierFRUInfo struct {
 	PowerCapacityWatts float32 `json:"PowerCapacityWatts"` // omitempty removed
 }
 
-// GatherFRUInventory now builds the correct JSON structure using maps.
 func GatherFRUInventory(hosts []string, params *CollectParams) error {
 	var allHardware []interface{}
 
@@ -117,7 +102,6 @@ func GatherFRUInventory(hosts []string, params *CollectParams) error {
 		Timeout:   30 * time.Second,
 	}
 
-	// This prototype will process the first host and assume it belongs to a test cabinet (e.g., x3000)
 	host := hosts[0]
 	const cabinetID = 3000
 
