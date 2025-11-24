@@ -204,11 +204,11 @@ func CrawlBMCForSystems(config CrawlerConfig) ([]InventoryDetail, error) {
 	}
 	// If nodes are found under both Chassis and Systems, Systems is assumed to be "more definitive"
 	// and will override corresponding fields from the Chassis version.
-	err = mergo.Merge(&systems, newSystems, mergo.WithOverride)
-	if err != nil {
-		return extract_ptr_map_values(systems), fmt.Errorf("failed to merge systems from Chassis and Systems endpoints: %v", err)
-	}
-	return extract_ptr_map_values(systems), nil
+	if err := mergo.Merge(&systems, newSystems, mergo.WithOverride); err != nil {
+        // Don't crash on merge errors
+        log.Warn().Err(err).Msg("failed to merge systems from Chassis and Systems endpoints (ignoring and continuing)")
+    }
+    return extract_ptr_map_values(systems), nil
 }
 
 // CrawlBMCForManagers connects to a BMC (Baseboard Management Controller) using the provided configuration,
